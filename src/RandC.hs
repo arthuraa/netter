@@ -10,16 +10,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
 
-data Program = Program { pVarDecls :: M.Map Var (Int, Int)
-                       , pVarCount :: Int
-                       , pComs :: [Com] }
-
 type Comp a = ExceptT String (StateT Program Identity) a
-
-revSeq :: [Com] -> Com
-revSeq [] = Skip
-revSeq [c] = c
-revSeq (c : coms) = Seq (revSeq coms) c
 
 var :: Int -> Int -> Comp Expr
 var lb ub = do

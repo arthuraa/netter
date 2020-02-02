@@ -19,7 +19,7 @@ data Expr = Var Var
           | Const Const
           | UnOp UnOp Expr
           | BinOp BinOp Expr Expr
-          | IfE Expr Expr Expr
+          | If Expr Expr Expr
   deriving (Show, Eq)
 
 instance ToSource UnOp where
@@ -54,4 +54,4 @@ instance ToSource Expr where
         x2 = toSource e2 in
     if isInfix o then "(" ++ x1 ++ " " ++ op ++ " " ++ x2 ++ ")"
     else op ++ "(" ++ x1 ++ "," ++ x2 ++ ")"
-  toSource (IfE cond eThen eElse) = "(" ++ toSource cond ++ " ? " ++ toSource eThen ++ " : " ++ toSource eElse ++ ")"
+  toSource (If cond eThen eElse) = "(" ++ toSource cond ++ " ? " ++ toSource eThen ++ " : " ++ toSource eElse ++ ")"
