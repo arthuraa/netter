@@ -4,7 +4,7 @@ import RandC.ToSource
 
 data Var = Named String
          | Unnamed Int
-  deriving (Show, Eq)
+  deriving (Show, Ord, Eq)
 
 instance ToSource Var where
   toSource (Named x) = "n_" ++ x
