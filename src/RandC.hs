@@ -2,8 +2,11 @@ module RandC where
 
 import RandC.P
 import RandC.Var
+import RandC.ToSource
 import RandC.Prism.Expr
 import qualified RandC.Imp as Imp
+import qualified RandC.Prism as Prism
+import qualified RandC.Compiler as Compiler
 
 import Data.Functor.Identity
 import Control.Monad.Except
@@ -75,6 +78,6 @@ compile prog = do
   let (res, S decls _ coms) = runComp prog
   case res of
     Left error -> putStrLn $ "Error: " ++ error
-    Right _ -> do
-      print decls
-      print coms
+    Right _ ->
+      let prog = Imp.Program decls (Imp.revSeq coms) in
+      putStrLn $ toSource $ Compiler.compile prog
