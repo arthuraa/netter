@@ -5,6 +5,8 @@ import RandC.P
 import RandC.Dice.Expr (Die, at)
 import qualified RandC.Dice.Expr  as DE
 import qualified RandC.Prism.Expr as PE
+import qualified RandC.DPA        as Src
+import qualified RandC.UPA        as Tgt
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -56,8 +58,11 @@ compileDepClass probs (vs, ds) m = do
   val <- marginalize probs ds
   return $ M.fromSet (\v -> compileExpr val $ m `at` v) vs
 
-compile ::
-  M.Map Die [Double] -> M.Map Var DE.Expr -> [(S.Set Var, P (M.Map Var PE.Expr))]
-compile probs es =
-  let dcs = dependencies $ M.map DE.dice es in
-    [(vs, compileDepClass probs dc es) | dc@(vs, _) <- dcs]
+compile :: Src.Program -> Tgt.Program
+compile (Src.Program decls probs es) =
+  let dcs = dependencies $ M.map DE.dice es
+      decl v = case M.lookup v decls of
+                 Just d  -> d
+                 Nothing -> error "Unbound variable" in
+
+    [(M.fromSet decl vs, compileDepClass probs dc es) | dc@(vs, _) <- dcs]

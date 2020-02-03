@@ -1,4 +1,4 @@
-module RandC.Diceing where
+module RandC.Compiler.Diceing where
 
 import RandC.Var
 import RandC.P

@@ -1,25 +1,16 @@
-{-# LANGUAGE DeriveFunctor #-}
 module RandC.Compiler where
 
 import RandC.Var
-import RandC.P
-import qualified RandC.Prism.Expr as Expr
-import qualified RandC.Imp        as Imp
-import qualified RandC.Prism      as Prism
+import qualified RandC.Imp                 as Imp
+import qualified RandC.Prism               as Prism
+import qualified RandC.Compiler.Diceing    as I2D
+import qualified RandC.Compiler.DiceToDPA  as D2DPA
+import qualified RandC.Compiler.Undiceing  as DPA2UPA
+import qualified RandC.Compiler.UPAToPrism as UPA2P
 
-import Control.Applicative
-import Data.Functor
-
-data G a = Return a
-         | If Expr.Expr (G a) (G a)
-  deriving (Show, Eq, Functor)
-
-instance Applicative G where
-  pure = Return
-  Return f <*> x = fmap f x
-  If e f g <*> x = If e (f <*> x) (g <*> x)
-
-instance Monad G where
-  return = Return
-  Return x >>= k = k x
-  If e x1 x2 >>= k = If e (x1 >>= k) (x2 >>= k)
+compile :: Imp.Program -> Prism.Program
+compile =
+  UPA2P.compile .
+  DPA2UPA.compile .
+  D2DPA.compile .
+  I2D.compile
