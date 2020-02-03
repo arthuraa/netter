@@ -2,6 +2,7 @@ module RandC.Compiler.ComToExpr where
 
 import RandC.Var
 import RandC.P
+import RandC.Dice.Expr (at)
 import qualified RandC.Dice.Expr as E
 import RandC.Dice
 
@@ -14,13 +15,13 @@ import qualified Data.Set as S
 compile :: Com -> M.Map Var E.Expr
 compile Skip         = M.empty
 compile (Assn v e)   = M.singleton v e
-compile (Seq c1 c2)  = let m1  = compile c1
-                           m2  = M.map (E.subst $ E.at m1) $ compile c2 in
+compile (Seq c1 c2)  = let m1 = compile c1
+                           m2 = M.map (E.subst $ (m1 `at`)) $ compile c2 in
                          M.unionWith (\e1 e2 -> e2) m1 m2
 compile (If e c1 c2) = let m1 = compile c1
                            m2 = compile c2
                            vs = M.keysSet m1 `S.union` M.keysSet m2 in
-                         M.fromSet (\v -> E.If e (m1 `E.at` v) (m2 `E.at` v)) vs
+                         M.fromSet (\v -> E.If e (m1 `at` v) (m2 `at` v)) vs
 
 -- The specification for compile, replacing the binding map by a function.
 compileF :: Com -> Var -> E.Expr
