@@ -69,6 +69,52 @@ if' e cThen cElse = do
 when' :: Expr -> Comp () -> Comp ()
 when' e c = if' e c (return ())
 
+-- Overload arthimatic operators
+instance Num Expr where
+  e1 + e2 = BinOp Plus e1 e2
+  e1 - e2 = BinOp Minus e1 e2
+  e1 * e2 = BinOp Times e1 e2
+
+  abs _ = undefined
+  signum = undefined
+  fromInteger i = Const $ Num $ fromInteger i
+
+max' = BinOp Max
+min' = BinOp Min
+mod' = BinOp Mod
+
+infixr 3 .&&
+(.&&) = BinOp And
+
+infixr 2 .||
+(.||) = BinOp Or
+
+infixl 7 .*
+(.*) = BinOp Times
+
+infixl 7 ./
+(./) = BinOp Div
+
+infixl 6 .+
+(.+) = BinOp Plus
+
+infixl 6 .-
+(.-) = BinOp Minus
+
+-- Overload equal sign with @.==@
+infix 4 .==
+(.==) :: Expr -> Expr -> Expr
+e1 .== e2 = BinOp Eq e1 e2
+
+infix 4 ./=
+e1 ./= e2 = UnOp Not (e1 .== e2)
+
+infix 4 .<=
+(.<=) = BinOp Leq
+
+infix 4 .<
+(.<) = BinOp Lt
+
 runComp :: Comp a -> (Either String a, S)
 runComp prog =
   runIdentity $ runStateT (runExceptT prog) $ S M.empty 0 []
