@@ -1,7 +1,7 @@
-module RandC.RandImp where
+module RandC.Imp where
 
 import RandC.Var
-import RandC.Expr hiding (If)
+import RandC.Prism.Expr hiding (If)
 import RandC.P
 
 import qualified Data.Set as S

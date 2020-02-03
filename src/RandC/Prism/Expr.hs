@@ -1,4 +1,11 @@
-module RandC.Expr where
+{-
+
+This module contains the grammar of Prism expressions, which is shared with our
+source language Imp.
+
+-}
+
+module RandC.Prism.Expr where
 
 import RandC.ToSource
 import RandC.Var

@@ -2,7 +2,7 @@ module RandC.Prism where
 
 import RandC.ToSource
 import RandC.Var
-import RandC.Expr
+import RandC.Prism.Expr
 import RandC.P
 import Data.List (intersperse)
 

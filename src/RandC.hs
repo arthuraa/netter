@@ -2,8 +2,8 @@ module RandC where
 
 import RandC.P
 import RandC.Var
-import RandC.Expr
-import qualified RandC.RandImp as Imp
+import RandC.Prism.Expr
+import qualified RandC.Imp as Imp
 
 import Data.Functor.Identity
 import Control.Monad.Except

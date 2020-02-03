@@ -3,9 +3,9 @@ module RandC.Compiler where
 
 import RandC.Var
 import RandC.P
-import qualified RandC.Expr    as Expr
-import qualified RandC.RandImp as Imp
-import qualified RandC.Prism   as Prism
+import qualified RandC.Prism.Expr as Expr
+import qualified RandC.Imp        as Imp
+import qualified RandC.Prism      as Prism
 
 import Control.Applicative
 import Data.Functor
