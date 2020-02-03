@@ -1,26 +1,27 @@
-module RandC.Diecing where
+module RandC.Diceing where
 
 import RandC.Var
 import RandC.P
-import qualified RandC.Expr    as Expr
-import qualified RandC.RandImp as S
-import qualified RandC.DieImp  as T
+import qualified RandC.Dice.Expr  as DE
+import qualified RandC.Prism.Expr as PE
+import qualified RandC.Imp        as S
+import qualified RandC.Dice       as T
 
 import qualified Data.Map as M
 import Control.Monad.ST
 import Data.STRef
 
-compileExpr :: Expr.Expr -> T.Expr
-compileExpr (Expr.Var v) =
-  T.Var v
-compileExpr (Expr.Const c) =
-  T.Const c
-compileExpr (Expr.UnOp o e) =
-  T.UnOp o (compileExpr e)
-compileExpr (Expr.BinOp o e1 e2) =
-  T.BinOp o (compileExpr e1) (compileExpr e2)
-compileExpr (Expr.If e eThen eElse) =
-  T.IfE (compileExpr e) (compileExpr eThen) (compileExpr eElse)
+compileExpr :: PE.Expr -> DE.Expr
+compileExpr (PE.Var v) =
+  DE.Var v
+compileExpr (PE.Const c) =
+  DE.Const c
+compileExpr (PE.UnOp o e) =
+  DE.UnOp o (compileExpr e)
+compileExpr (PE.BinOp o e1 e2) =
+  DE.BinOp o (compileExpr e1) (compileExpr e2)
+compileExpr (PE.If e eThen eElse) =
+  DE.If (compileExpr e) (compileExpr eThen) (compileExpr eElse)
 
 compile :: S.Program -> T.Program
 compile (S.Program varDecls com) = runST $ do
@@ -52,7 +53,7 @@ compile (S.Program varDecls com) = runST $ do
 
       compileCom (S.Choice v (P es)) = do
         d <- newDie $ map fst es
-        return $ T.Assn v (T.Choice d [compileExpr e | (_, e) <- es])
+        return $ T.Assn v (DE.Choice d [compileExpr e | (_, e) <- es])
 
   com' <- compileCom com
   ds   <- readSTRef dice
