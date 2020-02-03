@@ -3,26 +3,30 @@ module RandC where
 import RandC.P
 import RandC.Var
 import RandC.Expr
-import RandC.RandImp
+import qualified RandC.RandImp as Imp
 
 import Data.Functor.Identity
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
 
-type Comp a = ExceptT String (StateT Program Identity) a
+data S = S { sVarDecls :: M.Map Var (Int, Int)
+           , sVarCount :: Int
+           , sComs :: [Imp.Com] }
+
+type Comp a = ExceptT String (StateT S Identity) a
 
 var :: Int -> Int -> Comp Expr
 var lb ub = do
   when (lb > ub) $ throwError $
     "Invalid bounds for variable: " ++ show lb ++ ">" ++ show ub
 
-  Program decls count coms <- get
+  S decls count coms <- get
 
   let v = Unnamed count
   let decls' = M.insert v (lb, ub) decls
 
-  put $ Program decls' (count + 1) coms
+  put $ S decls' (count + 1) coms
 
   return $ Var v
 
@@ -30,46 +34,45 @@ var lb ub = do
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
 Var v .<- rhs = do
-  Program decls count coms <- get
-  put $ Program decls count (Assn v rhs : coms)
+  S decls count coms <- get
+  put $ S decls count (Imp.Assn v rhs : coms)
 
 e .<- rhs = throwError $ "Attempt to assign to non-variable " ++ show e
 
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
 Var v .<-$ rhs = do
-  Program decls count coms <- get
-  let choices = [(p, Assn v e) | (p, e) <- rhs]
-  put $ Program decls count (Choice (P choices) : coms)
+  S decls count coms <- get
+  put $ S decls count (Imp.Choice v (P rhs) : coms)
 
 e .<-$ rhs = throwError $ "Attempt to assign to non-variable " ++ show e
 
 if' :: Expr -> Comp () -> Comp () -> Comp ()
 if' e cThen cElse = do
-  Program decls count coms <- get
+  S decls count coms <- get
 
-  put $ Program decls count []
+  put $ S decls count []
   cThen
 
-  Program decls' count' comsThen <- get
+  S decls' count' comsThen <- get
 
-  put $ Program decls' count' []
+  put $ S decls' count' []
   cElse
 
-  Program decls'' count'' comsElse <- get
+  S decls'' count'' comsElse <- get
 
-  put $ Program decls'' count'' (If e (revSeq comsThen) (revSeq comsElse) : coms)
+  put $ S decls'' count'' (Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse) : coms)
 
 when' :: Expr -> Comp () -> Comp ()
 when' e c = if' e c (return ())
 
-runComp :: Comp a -> (Either String a, Program)
+runComp :: Comp a -> (Either String a, S)
 runComp prog =
-  runIdentity $ runStateT (runExceptT prog) $ Program M.empty 0 []
+  runIdentity $ runStateT (runExceptT prog) $ S M.empty 0 []
 
 compile :: Comp () -> IO ()
 compile prog = do
-  let (res, Program decls _ coms) = runComp prog
+  let (res, S decls _ coms) = runComp prog
   case res of
     Left error -> putStrLn $ "Error: " ++ error
     Right _ -> do
