@@ -14,7 +14,7 @@ data Assn = Assn { aLHS :: Var
   deriving (Show, Eq)
 
 instance ToSource Assn where
-  toSource (Assn v e) = "(" ++ show v ++ "' = " ++ show e ++ ")"
+  toSource (Assn v e) = "(" ++ toSource v ++ "' = " ++ toSource e ++ ")"
 
 -- Transitions
 --
