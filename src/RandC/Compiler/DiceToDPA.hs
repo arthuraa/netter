@@ -1,7 +1,6 @@
 module RandC.Compiler.DiceToDPA where
 
 import RandC.Var
-import RandC.P
 import RandC.Dice.Expr (at)
 import qualified RandC.Dice.Expr as E
 import qualified RandC.Dice as Src
@@ -21,7 +20,7 @@ compileCom (Src.Assn v e) =
 compileCom (Src.Seq c1 c2) =
   let m1 = compileCom c1
       m2 = M.map (E.subst $ (m1 `at`)) $ compileCom c2 in
-    M.unionWith (\e1 e2 -> e2) m1 m2
+    M.unionWith (\_ e2 -> e2) m1 m2
 compileCom (Src.If e c1 c2) =
   let m1 = compileCom c1
       m2 = compileCom c2

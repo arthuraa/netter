@@ -48,11 +48,28 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules: RandC
+  exposed-modules:
+    RandC
+    RandC.Prism.Expr
+    RandC.Var
+    RandC.Prism
+    RandC.Dice.Expr
+    RandC.Compiler.UPAToPrism
+    RandC.Compiler.DiceToDPA
+    RandC.Compiler.Diceing
+    RandC.Compiler.Undiceing
+    RandC.DPA
+    RandC.UPA
+    RandC.ToSource
+    RandC.Compiler
+    RandC.G
+    RandC.Dice
+    RandC.Imp
+    RandC.P
   
   -- Modules included in this library but not exported.
-  -- other-modules:       
-  
+  -- other-modules:
+
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:    
   
@@ -67,3 +84,5 @@ library
   -- Base language which the package is written in.
   default-language:    Haskell2010
   
+  ghc-options:         -Wall
+                       -Wno-name-shadowing

@@ -4,7 +4,6 @@ import RandC.Var
 import RandC.Prism.Expr hiding (If)
 import RandC.P
 
-import qualified Data.Set as S
 import qualified Data.Map as M
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)

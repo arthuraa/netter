@@ -1,13 +1,10 @@
 module RandC.Compiler.UPAToPrism where
 
-import RandC.Var
-import RandC.P
 import qualified RandC.Prism.Expr as E
 import qualified RandC.UPA   as Src
 import qualified RandC.Prism as Tgt
 
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 compileModule :: (Int, Src.Module) -> Tgt.Module
 compileModule (id, (decls, distr)) =

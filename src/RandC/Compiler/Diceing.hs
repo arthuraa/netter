@@ -1,6 +1,5 @@
 module RandC.Compiler.Diceing where
 
-import RandC.Var
 import RandC.P
 import qualified RandC.Dice.Expr  as DE
 import qualified RandC.Prism.Expr as PE

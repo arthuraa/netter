@@ -62,3 +62,13 @@ instance ToSource Expr where
     if isInfix o then "(" ++ x1 ++ " " ++ op ++ " " ++ x2 ++ ")"
     else op ++ "(" ++ x1 ++ "," ++ x2 ++ ")"
   toSource (If cond eThen eElse) = "(" ++ toSource cond ++ " ? " ++ toSource eThen ++ " : " ++ toSource eElse ++ ")"
+
+-- Overload arthimatic operators
+instance Num Expr where
+  e1 + e2 = BinOp Plus e1 e2
+  e1 - e2 = BinOp Minus e1 e2
+  e1 * e2 = BinOp Times e1 e2
+
+  abs _ = undefined
+  signum = undefined
+  fromInteger i = Const $ Num $ fromInteger i

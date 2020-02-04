@@ -1,13 +1,9 @@
 module RandC.Dice where
 
 import RandC.Var
-import RandC.P
 import qualified RandC.Dice.Expr  as DE
-import qualified RandC.Prism.Expr as PE
-import qualified RandC.Imp as Imp
 
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 data Com = Skip
          | Assn Var DE.Expr

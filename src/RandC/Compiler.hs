@@ -1,6 +1,5 @@
 module RandC.Compiler where
 
-import RandC.Var
 import qualified RandC.Imp                 as Imp
 import qualified RandC.Prism               as Prism
 import qualified RandC.Compiler.Diceing    as I2D

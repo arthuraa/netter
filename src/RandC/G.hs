@@ -1,11 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.G where
 
-import RandC.Var
 import qualified RandC.Prism.Expr as E
-
-import Control.Applicative
-import Data.Functor
 
 data G a = Return a
          | If E.Expr (G a) (G a)

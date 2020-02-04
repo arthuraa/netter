@@ -3,9 +3,8 @@ module RandC where
 import RandC.P
 import RandC.Var
 import RandC.ToSource
-import RandC.Prism.Expr
+import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
-import qualified RandC.Prism as Prism
 import qualified RandC.Compiler as Compiler
 
 import Data.Functor.Identity
@@ -13,11 +12,16 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
 
+type Expr = PE.Expr
+
 data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sVarCount :: Int
            , sComs :: [Imp.Com] }
 
 type Comp a = ExceptT String (StateT S Identity) a
+
+num :: Int -> Expr
+num = PE.Const . PE.Num
 
 var :: Int -> Int -> Comp Expr
 var lb ub = do
@@ -31,24 +35,32 @@ var lb ub = do
 
   put $ S decls' (count + 1) coms
 
-  return $ Var v
+  return $ PE.Var v
 
 -- Assignment operator used for Var
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
-Var v .<- rhs = do
+PE.Var v .<- rhs = do
   S decls count coms <- get
   put $ S decls count (Imp.Assn v rhs : coms)
 
-e .<- rhs = throwError $ "Attempt to assign to non-variable " ++ show e
+e .<- _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
+
+infix 1 .?
+(.?) :: Expr -> Expr -> Expr -> Expr
+e .? eThen = PE.If e eThen
+
+infix 0 .:
+(.:) :: (Expr -> Expr) -> Expr -> Expr
+(.:) = id
 
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
-Var v .<-$ rhs = do
+PE.Var v .<-$ rhs = do
   S decls count coms <- get
   put $ S decls count (Imp.Choice v (P rhs) : coms)
 
-e .<-$ rhs = throwError $ "Attempt to assign to non-variable " ++ show e
+e .<-$ _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
 
 if' :: Expr -> Comp () -> Comp () -> Comp ()
 if' e cThen cElse = do
@@ -66,54 +78,65 @@ if' e cThen cElse = do
 
   put $ S decls'' count'' (Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse) : coms)
 
+switch :: [(Expr, Comp ())] -> Comp ()
+switch [] = return ()
+switch ((cond, e) : branches) = if' cond e (switch branches)
+
+orElse :: Expr
+orElse = PE.Const (PE.Bool True)
+
 when' :: Expr -> Comp () -> Comp ()
 when' e c = if' e c (return ())
 
--- Overload arthimatic operators
-instance Num Expr where
-  e1 + e2 = BinOp Plus e1 e2
-  e1 - e2 = BinOp Minus e1 e2
-  e1 * e2 = BinOp Times e1 e2
+max' :: Expr -> Expr -> Expr
+max' = PE.BinOp PE.Max
 
-  abs _ = undefined
-  signum = undefined
-  fromInteger i = Const $ Num $ fromInteger i
+min' :: Expr -> Expr -> Expr
+min' = PE.BinOp PE.Min
 
-max' = BinOp Max
-min' = BinOp Min
-mod' = BinOp Mod
+mod' :: Expr -> Expr -> Expr
+mod' = PE.BinOp PE.Mod
 
 infixr 3 .&&
-(.&&) = BinOp And
+(.&&) :: Expr -> Expr -> Expr
+(.&&) = PE.BinOp PE.And
 
 infixr 2 .||
-(.||) = BinOp Or
+(.||) :: Expr -> Expr -> Expr
+(.||) = PE.BinOp PE.Or
 
 infixl 7 .*
-(.*) = BinOp Times
+(.*) :: Expr -> Expr -> Expr
+(.*) = PE.BinOp PE.Times
 
 infixl 7 ./
-(./) = BinOp Div
+(./) :: Expr -> Expr -> Expr
+(./) = PE.BinOp PE.Div
 
 infixl 6 .+
-(.+) = BinOp Plus
+(.+) :: Expr -> Expr -> Expr
+(.+) = PE.BinOp PE.Plus
 
 infixl 6 .-
-(.-) = BinOp Minus
+(.-) :: Expr -> Expr -> Expr
+(.-) = PE.BinOp PE.Minus
 
 -- Overload equal sign with @.==@
 infix 4 .==
 (.==) :: Expr -> Expr -> Expr
-e1 .== e2 = BinOp Eq e1 e2
+e1 .== e2 = PE.BinOp PE.Eq e1 e2
 
 infix 4 ./=
-e1 ./= e2 = UnOp Not (e1 .== e2)
+(./=) :: Expr -> Expr -> Expr
+e1 ./= e2 = PE.UnOp PE.Not (e1 .== e2)
 
 infix 4 .<=
-(.<=) = BinOp Leq
+(.<=) :: Expr -> Expr -> Expr
+(.<=) = PE.BinOp PE.Leq
 
 infix 4 .<
-(.<) = BinOp Lt
+(.<) :: Expr -> Expr -> Expr
+(.<) = PE.BinOp PE.Lt
 
 runComp :: Comp a -> (Either String a, S)
 runComp prog =

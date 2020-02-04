@@ -27,9 +27,12 @@ data Transition = Transition { tCond :: Expr
 instance ToSource Transition where
   toSource (Transition c (P probs)) =
     "[step] " ++ toSource c ++ " -> " ++ doProbs probs ++ ";"
-    where doProbs [] = error "Cannot have a transition with no actions"
-          doProbs [(_, assns)] = doAssns assns
-          doProbs probs = concat $ intersperse " + " $ map doProb probs
+    where doProbs [] =
+            error "Cannot have a transition with no actions"
+          doProbs [(_, assns)] =
+            doAssns assns
+          doProbs _ =
+            concat $ intersperse " + " $ map doProb probs
 
           doProb (prob, assns) = show prob ++ " : " ++ doAssns assns
 
