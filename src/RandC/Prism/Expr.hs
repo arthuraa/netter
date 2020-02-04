@@ -72,3 +72,16 @@ instance Num Expr where
   abs _ = undefined
   signum = undefined
   fromInteger i = Const $ Num $ fromInteger i
+
+simplify :: Expr -> Expr
+simplify (Var v)            = Var v
+simplify (Const c)          = Const c
+simplify (UnOp o e)         = UnOp o (simplify e)
+simplify (BinOp o e1 e2)    = BinOp o (simplify e1) (simplify e2)
+simplify (If e eThen eElse) = let e'     = simplify e
+                                  eThen' = simplify eThen
+                                  eElse' = simplify eElse in
+                                case e' of
+                                  Const (Bool True) -> eThen'
+                                  Const (Bool False) -> eElse'
+                                  _ -> If e' eThen' eElse'

@@ -56,7 +56,7 @@ compileDepClass ::
   M.Map Die [Double] -> DepClass -> M.Map Var DE.Expr -> P (M.Map Var PE.Expr)
 compileDepClass probs (vs, ds) m = do
   val <- marginalize probs ds
-  return $ M.fromSet (\v -> compileExpr val $ m `at` v) vs
+  return $ M.fromSet (\v -> PE.simplify $ compileExpr val $ m `at` v) vs
 
 compile :: Src.Program -> Tgt.Program
 compile (Src.Program decls probs es) =
