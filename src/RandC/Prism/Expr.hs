@@ -81,7 +81,8 @@ simplify (BinOp o e1 e2)    = BinOp o (simplify e1) (simplify e2)
 simplify (If e eThen eElse) = let e'     = simplify e
                                   eThen' = simplify eThen
                                   eElse' = simplify eElse in
-                                case e' of
+                                if eThen' == eElse' then eThen'
+                                else case e' of
                                   Const (Bool True) -> eThen'
                                   Const (Bool False) -> eElse'
                                   _ -> If e' eThen' eElse'
