@@ -15,7 +15,7 @@ import qualified Data.Map as M
 type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
-           , sVarCount :: Int
+           , sVarCount :: M.Map String Int
            , sComs :: [Imp.Com] }
 
 type Comp a = ExceptT String (StateT S Identity) a
@@ -23,19 +23,25 @@ type Comp a = ExceptT String (StateT S Identity) a
 num :: Int -> Expr
 num = PE.Const . PE.Num
 
-var :: Int -> Int -> Comp Expr
-var lb ub = do
+namedVar :: String -> Int -> Int -> Comp Expr
+namedVar x lb ub = do
   when (lb > ub) $ throwError $
-    "Invalid bounds for variable: " ++ show lb ++ ">" ++ show ub
+    "Invalid bounds for variable " ++ x ++ ": " ++
+    show lb ++ ">" ++ show ub
 
-  S decls count coms <- get
+  S decls counts coms <- get
 
-  let v = Unnamed count
+  let count = M.findWithDefault 0 x counts
+  let v = Unnamed x count
   let decls' = M.insert v (lb, ub) decls
+  let counts' = M.insert x (count + 1) counts
 
-  put $ S decls' (count + 1) coms
+  put $ S decls' counts'  coms
 
   return $ PE.Var v
+
+var :: Int -> Int -> Comp Expr
+var = namedVar "_"
 
 -- Assignment operator used for Var
 infix 1 .<-
@@ -140,7 +146,7 @@ infix 4 .<
 
 runComp :: Comp a -> (Either String a, S)
 runComp prog =
-  runIdentity $ runStateT (runExceptT prog) $ S M.empty 0 []
+  runIdentity $ runStateT (runExceptT prog) $ S M.empty M.empty []
 
 compile :: Comp () -> IO ()
 compile prog = do
