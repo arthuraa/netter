@@ -15,10 +15,9 @@ import qualified Data.Map as M
 type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
-           , sVarCount :: M.Map String Int
            , sComs :: [Imp.Com] }
 
-type Comp a = ExceptT String (StateT S Identity) a
+type Comp a = ExceptT String (VarT (StateT S Identity)) a
 
 num :: Int -> Expr
 num = PE.Const . PE.Num
@@ -29,14 +28,13 @@ namedVar x lb ub = do
     "Invalid bounds for variable " ++ x ++ ": " ++
     show lb ++ ">" ++ show ub
 
-  S decls counts coms <- get
+  v <- fresh x
 
-  let count = M.findWithDefault 0 x counts
-  let v = Unnamed x count
+  S decls coms <- get
+
   let decls' = M.insert v (lb, ub) decls
-  let counts' = M.insert x (count + 1) counts
 
-  put $ S decls' counts'  coms
+  put $ S decls' coms
 
   return $ PE.Var v
 
@@ -47,8 +45,8 @@ var = namedVar "_"
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
 PE.Var v .<- rhs = do
-  S decls count coms <- get
-  put $ S decls count (Imp.Assn v rhs : coms)
+  S decls coms <- get
+  put $ S decls (Imp.Assn v rhs : coms)
 
 e .<- _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
 
@@ -63,26 +61,26 @@ infix 0 .:
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
 PE.Var v .<-$ rhs = do
-  S decls count coms <- get
-  put $ S decls count (Imp.Choice v (P rhs) : coms)
+  S decls coms <- get
+  put $ S decls (Imp.Choice v (P rhs) : coms)
 
 e .<-$ _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
 
 if' :: Expr -> Comp () -> Comp () -> Comp ()
 if' e cThen cElse = do
-  S decls count coms <- get
+  S decls coms <- get
 
-  put $ S decls count []
+  put $ S decls []
   cThen
 
-  S decls' count' comsThen <- get
+  S decls' comsThen <- get
 
-  put $ S decls' count' []
+  put $ S decls' []
   cElse
 
-  S decls'' count'' comsElse <- get
+  S decls'' comsElse <- get
 
-  put $ S decls'' count'' (Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse) : coms)
+  put $ S decls'' (Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse) : coms)
 
 switch :: [(Expr, Comp ())] -> Comp ()
 switch [] = return ()
@@ -144,13 +142,16 @@ infix 4 .<
 (.<) :: Expr -> Expr -> Expr
 (.<) = PE.BinOp PE.Lt
 
-runComp :: Comp a -> (Either String a, S)
+runComp :: Comp a -> (Either String a, S, Vars)
 runComp prog =
-  runIdentity $ runStateT (runExceptT prog) $ S M.empty M.empty []
+  let prog'  = runVarT (runExceptT prog) novars in
+  let prog'' = runStateT  prog' $ S M.empty []  in
+  let ((res, vs), prog''')  = runIdentity prog'' in
+  (res, prog''', vs)
 
 compile :: Comp () -> IO ()
 compile prog = do
-  let (res, S decls _ coms) = runComp prog
+  let (res, S decls coms, _) = runComp prog
   case res of
     Left error -> putStrLn $ "Error: " ++ error
     Right _ ->
