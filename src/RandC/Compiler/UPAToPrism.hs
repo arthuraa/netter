@@ -18,4 +18,4 @@ compileModule (id, (decls, distr)) =
 
 compile :: Src.Program -> Tgt.Program
 compile mods =
-  Tgt.Program $ map compileModule $ zip [0..] mods
+  Tgt.Program [] $ map compileModule $ zip [0..] mods

@@ -66,13 +66,26 @@ instance ToSource Module where
               [ toSource transition | transition <- transitions ] ++
               [ "endmodule" ]
 
+-- Formula
+--
+-- formula v = e;
+data Formula = Formula { fName :: Var
+                       , fDef :: Expr }
+  deriving (Show, Eq)
+
+instance ToSource Formula where
+  toSource (Formula v e) =
+    "formula " ++ toSource v ++ " = " ++ toSource e ++ ";"
+
 -- Program
 --
 -- dtmc
+-- <formula>*
 -- <module>*
-data Program = Program [Module]
+data Program = Program [Formula] [Module]
 
 instance ToSource Program where
-  toSource (Program ms) =
+  toSource (Program fs ms) =
     unlines $ [ "dtmc" ] ++
+              [ toSource f | f <- fs ] ++
               [ toSource m | m <- ms ]
