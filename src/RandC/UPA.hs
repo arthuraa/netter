@@ -8,4 +8,6 @@ import qualified Data.Map as M
 
 type Module = (M.Map Var (Int, Int), P (M.Map Var Expr))
 
-type Program = [Module]
+data Program = Program { pDefs :: M.Map Var Expr
+                       , pMods :: [Module] }
+  deriving (Show, Eq)

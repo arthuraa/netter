@@ -3,12 +3,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
-module RandC.Var (Var, Vars, VarT, runVarT, novars, fresh) where
+module RandC.Var (Var, Vars, VarGen, VarGenT, name, runVarGenT, novars, fresh) where
 
 import RandC.ToSource
 
 import Control.Monad.Except
 import Control.Monad.State
+import Data.Functor.Identity
 import qualified Data.Map as M
 
 data Var = Var String Int
@@ -19,27 +20,32 @@ instance ToSource Var where
 
 type Vars = M.Map String Int
 
+name :: Var -> String
+name (Var x _) = x
+
 novars :: Vars
 novars = M.empty
 
-newtype VarT m a = VarT (StateT Vars m a)
+newtype VarGenT m a = VarGenT (StateT Vars m a)
   deriving (Applicative,Functor,Monad)
 
-runVarT :: Monad m => VarT m a -> Vars -> m (a, Vars)
-runVarT (VarT f) vs = runStateT f vs
+runVarGenT :: Monad m => VarGenT m a -> Vars -> m (a, Vars)
+runVarGenT (VarGenT f) vs = runStateT f vs
+
+type VarGen a = VarGenT Identity a
 
 class Monad m => MonadFresh m where
   fresh :: String -> m Var
 
-instance Monad m => MonadFresh (VarT m) where
-  fresh x = VarT $ do
+instance Monad m => MonadFresh (VarGenT m) where
+  fresh x = VarGenT $ do
     vs <- get
     let n = M.findWithDefault 0 x vs
     put $ M.insert x (n + 1) vs
     return $ Var x n
 
-instance MonadState s m => MonadState s (VarT m) where
-  state f = VarT $ StateT $ \vs -> do
+instance MonadState s m => MonadState s (VarGenT m) where
+  state f = VarGenT $ StateT $ \vs -> do
     x <- get
     let (r, x') = f x
     put x'

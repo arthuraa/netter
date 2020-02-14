@@ -10,6 +10,8 @@ module RandC.Prism.Expr where
 import RandC.ToSource
 import RandC.Var
 
+import qualified Data.Set as S
+
 data Const = Num Int | Bool Bool
   deriving (Show, Eq)
 
@@ -28,6 +30,11 @@ data Expr = Var Var
           | BinOp BinOp Expr Expr
           | If Expr Expr Expr
   deriving (Show, Eq)
+
+atomic :: Expr -> Bool
+atomic (Var _)   = True
+atomic (Const _) = True
+atomic _         = False
 
 instance ToSource UnOp where
   toSource Not = "!"
@@ -73,6 +80,18 @@ instance Num Expr where
   signum = undefined
   fromInteger i = Const $ Num $ fromInteger i
 
+substM :: Monad m => (Var -> m Expr) -> Expr -> m Expr
+substM s (Var v) =
+  s v
+substM s (Const c) =
+  return $ Const c
+substM s (UnOp o e) =
+  UnOp o <$> substM s e
+substM s (BinOp o e1 e2) =
+  BinOp o <$> substM s e1 <*> substM s e2
+substM s (If e eThen eElse) =
+  If <$> substM s e <*> substM s eThen <*> substM s eElse
+
 simplify :: Expr -> Expr
 simplify (Var v)            = Var v
 simplify (Const c)          = Const c
@@ -86,3 +105,10 @@ simplify (If e eThen eElse) = let e'     = simplify e
                                   Const (Bool True) -> eThen'
                                   Const (Bool False) -> eElse'
                                   _ -> If e' eThen' eElse'
+
+vars :: Expr -> S.Set Var
+vars (Var v)            = S.singleton v
+vars (Const _)          = S.empty
+vars (UnOp _ e)         = vars e
+vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
+vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]

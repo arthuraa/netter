@@ -17,5 +17,7 @@ compileModule (id, (decls, distr)) =
     Tgt.Module id decls' [trans $ assns `fmap` distr]
 
 compile :: Src.Program -> Tgt.Program
-compile mods =
-  Tgt.Program [] $ map compileModule $ zip [0..] mods
+compile (Src.Program defs mods) =
+  let defs' = [Tgt.Formula v e | (v, e) <- M.assocs defs]
+      mods' = map compileModule $ zip [0..] mods in
+  Tgt.Program defs' mods'

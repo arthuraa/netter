@@ -17,7 +17,7 @@ type Expr = PE.Expr
 data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sComs :: [Imp.Com] }
 
-type Comp a = ExceptT String (VarT (StateT S Identity)) a
+type Comp a = ExceptT String (VarGenT (StateT S Identity)) a
 
 num :: Int -> Expr
 num = PE.Const . PE.Num
@@ -144,16 +144,17 @@ infix 4 .<
 
 runComp :: Comp a -> (Either String a, S, Vars)
 runComp prog =
-  let prog'  = runVarT (runExceptT prog) novars in
+  let prog'  = runVarGenT (runExceptT prog) novars in
   let prog'' = runStateT  prog' $ S M.empty []  in
   let ((res, vs), prog''')  = runIdentity prog'' in
   (res, prog''', vs)
 
 compile :: Comp () -> IO ()
 compile prog = do
-  let (res, S decls coms, _) = runComp prog
+  let (res, S decls coms, vars) = runComp prog
   case res of
     Left error -> putStrLn $ "Error: " ++ error
     Right _ ->
-      let prog = Imp.Program decls (Imp.revSeq coms) in
-      putStrLn $ toSource $ Compiler.compile prog
+      let prog = Imp.Program decls (Imp.revSeq coms)
+          (tprog, _) = runIdentity $ runVarGenT (Compiler.compile prog) vars in
+      putStrLn $ toSource tprog
