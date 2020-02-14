@@ -10,6 +10,8 @@ module RandC.Prism.Expr where
 import RandC.Display
 import RandC.Var
 
+import Data.Functor.Identity
+import qualified Data.Map as M
 import qualified Data.Set as S
 
 data Const = Num Int | Bool Bool
@@ -88,6 +90,15 @@ substM s e = go e
         go (BinOp o e1 e2)    = BinOp o <$> go e1 <*> go e2
         go (If e eThen eElse) = If <$> go e <*> go eThen <*> go eElse
 
+subst1M :: Monad m => Var -> m Expr -> Expr -> m Expr
+subst1M v e = substM (\v' -> if v == v' then e else return $ Var v')
+
+subst :: (Var -> Expr) -> Expr -> Expr
+subst s = runIdentity . substM (return . s)
+
+subst1 :: Var -> Expr -> Expr -> Expr
+subst1 v e e' = runIdentity $ subst1M v (return e) e'
+
 simplify1 :: UnOp -> Expr -> Expr
 simplify1 Not (Const (Bool b)) = Const (Bool (not b))
 simplify1 o e = UnOp o e
@@ -143,3 +154,10 @@ vars (Const _)          = S.empty
 vars (UnOp _ e)         = vars e
 vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
 vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
+
+counts :: Expr -> M.Map Var Int
+counts (Var v)            = M.singleton v 1
+counts (Const _)          = M.empty
+counts (UnOp _ e)         = counts e
+counts (BinOp _ e1 e2)    = counts e1 <+> counts e2
+counts (If e eThen eElse) = counts e <+> counts eThen <+> counts eElse

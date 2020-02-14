@@ -58,6 +58,7 @@ library
     RandC.Compiler.DiceToSSA1
     RandC.Compiler.SSA1ToSSA2
     RandC.Compiler.SSA2ToSSA3
+    RandC.Compiler.Inlining
     RandC.Compiler.Diceing
     RandC.Compiler.Undiceing
     RandC.Compiler.DToP
