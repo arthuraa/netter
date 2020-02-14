@@ -142,19 +142,20 @@ infix 4 .<
 (.<) :: Expr -> Expr -> Expr
 (.<) = PE.BinOp PE.Lt
 
-runComp :: Comp a -> (Either String a, S, Vars)
-runComp prog =
+runComp :: Comp a -> (Imp.Program -> VarGen b) -> (Either String b)
+runComp prog f =
   let prog'  = runVarGenT (runExceptT prog) novars in
   let prog'' = runStateT  prog' $ S M.empty []  in
-  let ((res, vs), prog''')  = runIdentity prog'' in
-  (res, prog''', vs)
-
-compile :: Comp () -> IO ()
-compile prog = do
-  let (res, S decls coms, vars) = runComp prog
+  let ((res, vars), S decls coms)  = runIdentity prog'' in
   case res of
-    Left error -> putStrLn $ "Error: " ++ error
+    Left error -> Left error
     Right _ ->
       let prog = Imp.Program decls (Imp.revSeq coms)
-          (tprog, _) = runIdentity $ runVarGenT (Compiler.compile prog) vars in
-      putStrLn $ toSource tprog
+          (tprog, _) = runIdentity $ runVarGenT (f prog) vars in
+        Right tprog
+
+compile :: Comp () -> IO ()
+compile prog =
+  case runComp prog Compiler.compile of
+    Left error -> putStrLn $ "Error: " ++ error
+    Right tprog -> putStrLn $ toSource tprog
