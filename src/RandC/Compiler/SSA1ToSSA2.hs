@@ -17,6 +17,8 @@ compileExpr (DE.UnOp o e) =
   PE.UnOp o <$> compileExpr e
 compileExpr (DE.BinOp o e1 e2) =
   PE.BinOp o <$> compileExpr e1 <*> compileExpr e2
+compileExpr (DE.If e eThen eElse) =
+  PE.If <$> compileExpr e <*> compileExpr eThen <*> compileExpr eElse
 compileExpr (DE.Choice d es) =
   Choice d $ map compileExpr es
 
