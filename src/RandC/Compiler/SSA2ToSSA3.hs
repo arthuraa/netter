@@ -56,9 +56,9 @@ inline assn defs =
       assn' =
         M.map unfoldAssn assn
   in
-    (assn', detVars)
+    (M.map (fmap PE.simplify) assn', M.map PE.simplify detVars)
 
 compile :: Src.Program -> Tgt.Program
 compile (Src.Program decls ds assn defs) =
   let (assn', defs') = inline assn defs in
-  Tgt.Program decls ds assn' (M.map PE.simplify defs')
+  Tgt.Program decls ds assn' defs'
