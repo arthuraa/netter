@@ -66,7 +66,7 @@ library
     RandC.SSA2
     RandC.SSA3
     RandC.UPA
-    RandC.ToSource
+    RandC.Display
     RandC.Compiler
     RandC.D
     RandC.G

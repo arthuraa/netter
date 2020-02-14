@@ -1,2 +1,3 @@
 dist/
+dist-newstyle/
 .dir-locals.el

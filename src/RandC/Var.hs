@@ -5,7 +5,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module RandC.Var (Var, Vars, VarGen, VarGenT, name, runVarGenT, novars, fresh) where
 
-import RandC.ToSource
+import RandC.Display
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -15,8 +15,8 @@ import qualified Data.Map as M
 data Var = Var String Int
   deriving (Show, Ord, Eq)
 
-instance ToSource Var where
-  toSource (Var x n) = x ++ "_" ++ show n
+instance Display Var where
+  display (Var x n) = x ++ "_" ++ show n
 
 type Vars = M.Map String Int
 

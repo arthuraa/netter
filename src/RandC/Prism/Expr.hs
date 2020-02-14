@@ -7,7 +7,7 @@ source language Imp.
 
 module RandC.Prism.Expr where
 
-import RandC.ToSource
+import RandC.Display
 import RandC.Var
 
 import qualified Data.Set as S
@@ -36,39 +36,39 @@ atomic (Var _)   = True
 atomic (Const _) = True
 atomic _         = False
 
-instance ToSource UnOp where
-  toSource Not = "!"
+instance Display UnOp where
+  display Not = "!"
 
-instance ToSource BinOp where
-  toSource Plus = "+"
-  toSource Minus = "-"
-  toSource Times = "*"
-  toSource Div = "/"
-  toSource Eq = "="
-  toSource Leq = "<="
-  toSource Lt = "<"
-  toSource Or = "|"
-  toSource And = "&"
-  toSource Max = "max"
-  toSource Min = "min"
-  toSource Mod = "mod"
+instance Display BinOp where
+  display Plus = "+"
+  display Minus = "-"
+  display Times = "*"
+  display Div = "/"
+  display Eq = "="
+  display Leq = "<="
+  display Lt = "<"
+  display Or = "|"
+  display And = "&"
+  display Max = "max"
+  display Min = "min"
+  display Mod = "mod"
 
-instance ToSource Const where
-  toSource (Num n) = show n
-  toSource (Bool True) = "true"
-  toSource (Bool False) = "false"
+instance Display Const where
+  display (Num n) = show n
+  display (Bool True) = "true"
+  display (Bool False) = "false"
 
-instance ToSource Expr where
-  toSource (Var v) = toSource v
-  toSource (Const k) = toSource k
-  toSource (UnOp o e) = toSource o ++ toSource e
-  toSource (BinOp o e1 e2) =
-    let op = toSource o
-        x1 = toSource e1
-        x2 = toSource e2 in
+instance Display Expr where
+  display (Var v) = display v
+  display (Const k) = display k
+  display (UnOp o e) = display o ++ display e
+  display (BinOp o e1 e2) =
+    let op = display o
+        x1 = display e1
+        x2 = display e2 in
     if isInfix o then "(" ++ x1 ++ " " ++ op ++ " " ++ x2 ++ ")"
     else op ++ "(" ++ x1 ++ "," ++ x2 ++ ")"
-  toSource (If cond eThen eElse) = "(" ++ toSource cond ++ " ? " ++ toSource eThen ++ " : " ++ toSource eElse ++ ")"
+  display (If cond eThen eElse) = "(" ++ display cond ++ " ? " ++ display eThen ++ " : " ++ display eElse ++ ")"
 
 -- Overload arthimatic operators
 instance Num Expr where

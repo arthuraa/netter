@@ -2,7 +2,7 @@ module RandC where
 
 import RandC.P
 import RandC.Var
-import RandC.ToSource
+import RandC.Display
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
@@ -158,4 +158,4 @@ compile :: Comp () -> IO ()
 compile prog =
   case runComp prog Compiler.compile of
     Left error -> putStrLn $ "Error: " ++ error
-    Right tprog -> putStrLn $ toSource tprog
+    Right tprog -> putStrLn $ display tprog
