@@ -23,8 +23,8 @@ varDeps es v = go S.empty [v]
 
 dieDeps :: Src.Defs -> Var -> S.Set Die
 dieDeps es v =
-  S.unions $ [ds v' | v' <- S.toList $ varDeps es v]
-  where ds v' = case M.lookup v es of
+  S.unions [ds v' | v' <- S.toList $ varDeps es v]
+  where ds v' = case M.lookup v' es of
                   Just e -> dice e
                   Nothing -> S.empty
 
