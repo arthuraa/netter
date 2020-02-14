@@ -117,6 +117,10 @@ simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
     _   -> error $ "Expr: found ill-typed expression " ++ display (BinOp o e1 e2)
 simplify2 Eq e1 e2
   | e1 == e2 = Const $ Bool $ True
+simplify2 Leq e1 e2
+  | e1 == e2 = Const $ Bool $ True
+simplify2 Lt e1 e2
+  | e1 == e2 = Const $ Bool $ False
 simplify2 o e1 e2 = BinOp o e1 e2
 
 simplify :: Expr -> Expr
