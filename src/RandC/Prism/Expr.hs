@@ -88,11 +88,42 @@ substM s e = go e
         go (BinOp o e1 e2)    = BinOp o <$> go e1 <*> go e2
         go (If e eThen eElse) = If <$> go e <*> go eThen <*> go eElse
 
+simplify1 :: UnOp -> Expr -> Expr
+simplify1 Not (Const (Bool b)) = Const (Bool (not b))
+simplify1 o e = UnOp o e
+
+simplify2 :: BinOp -> Expr -> Expr -> Expr
+simplify2 o e1@(Const (Num n1)) e2@(Const (Num n2)) =
+  let num  f = Const $ Num  $ f n1 n2
+      bool f = Const $ Bool $ f n1 n2 in
+  case o of
+    Plus  -> num  (+)
+    Minus -> num  (-)
+    Times -> num  (*)
+    Div   -> num  div
+    Eq    -> bool (==)
+    Leq   -> bool (<=)
+    Lt    -> bool (<)
+    Max   -> num  max
+    Min   -> num  min
+    Mod   -> num  mod
+    _     -> error $ "Expr: found ill-typed expression " ++ display (BinOp o e1 e2)
+simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
+  let bool f = Const $ Bool $ f b1 b2 in
+  case o of
+    Eq  -> bool (==)
+    And -> bool (&&)
+    Or  -> bool (||)
+    _   -> error $ "Expr: found ill-typed expression " ++ display (BinOp o e1 e2)
+simplify2 Eq e1 e2
+  | e1 == e2 = Const $ Bool $ True
+simplify2 o e1 e2 = BinOp o e1 e2
+
 simplify :: Expr -> Expr
 simplify (Var v)            = Var v
 simplify (Const c)          = Const c
-simplify (UnOp o e)         = UnOp o (simplify e)
-simplify (BinOp o e1 e2)    = BinOp o (simplify e1) (simplify e2)
+simplify (UnOp o e)         = simplify1 o (simplify e)
+simplify (BinOp o e1 e2)    = simplify2 o (simplify e1) (simplify e2)
 simplify (If e eThen eElse) = let e'     = simplify e
                                   eThen' = simplify eThen
                                   eElse' = simplify eElse in

@@ -61,4 +61,4 @@ inline assn defs =
 compile :: Src.Program -> Tgt.Program
 compile (Src.Program decls ds assn defs) =
   let (assn', defs') = inline assn defs in
-  Tgt.Program decls ds assn' defs'
+  Tgt.Program decls ds assn' (M.map PE.simplify defs')
