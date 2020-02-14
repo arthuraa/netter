@@ -81,16 +81,12 @@ instance Num Expr where
   fromInteger i = Const $ Num $ fromInteger i
 
 substM :: Monad m => (Var -> m Expr) -> Expr -> m Expr
-substM s (Var v) =
-  s v
-substM s (Const c) =
-  return $ Const c
-substM s (UnOp o e) =
-  UnOp o <$> substM s e
-substM s (BinOp o e1 e2) =
-  BinOp o <$> substM s e1 <*> substM s e2
-substM s (If e eThen eElse) =
-  If <$> substM s e <*> substM s eThen <*> substM s eElse
+substM s e = go e
+  where go (Var v)            = s v
+        go (Const c)          = return $ Const c
+        go (UnOp o e)         = UnOp o <$> go e
+        go (BinOp o e1 e2)    = BinOp o <$> go e1 <*> go e2
+        go (If e eThen eElse) = If <$> go e <*> go eThen <*> go eElse
 
 simplify :: Expr -> Expr
 simplify (Var v)            = Var v
