@@ -5,6 +5,7 @@ import RandC.Display
 import RandC.P
 import RandC.Prism.Expr
 
+import Data.List (intersperse)
 import qualified Data.Map as M
 
 newtype Assn = Assn (M.Map Var Expr)
@@ -18,8 +19,9 @@ data Program = Program { pDefs :: M.Map Var Expr
   deriving (Show, Eq)
 
 instance Display Assn where
-  display (Assn assns) = concat [ display v ++ " = " ++ display e
-                                | (v, e) <- M.assocs assns ]
+  display (Assn assns) =
+    concat $ intersperse " & " [ display v ++ " = " ++ display e
+                               | (v, e) <- M.assocs assns ]
 
 instance Display Module where
   display (Module decls assns) =
