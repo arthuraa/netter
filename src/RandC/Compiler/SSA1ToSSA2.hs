@@ -1,5 +1,6 @@
 module RandC.Compiler.SSA1ToSSA2 where
 
+import RandC.Var
 import RandC.D
 import qualified RandC.Dice.Expr  as DE
 import qualified RandC.Prism.Expr as PE
@@ -22,6 +23,6 @@ compileExpr (DE.If e eThen eElse) =
 compileExpr (DE.Choice d es) =
   Choice d $ map compileExpr es
 
-compile :: Src.Program -> Tgt.Program
+compile :: Src.Program -> VarGen Tgt.Program
 compile (Src.Program decls dice assn defs) =
-  Tgt.Program decls dice assn (M.map compileExpr defs)
+  return $ Tgt.Program decls dice assn (M.map compileExpr defs)

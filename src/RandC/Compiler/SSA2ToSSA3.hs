@@ -58,7 +58,7 @@ inline assn defs =
   in
     (M.map (fmap PE.simplify) assn', M.map PE.simplify detVars)
 
-compile :: Src.Program -> Tgt.Program
+compile :: Src.Program -> VarGen Tgt.Program
 compile (Src.Program decls ds assn defs) =
   let (assn', defs') = inline assn defs in
-  Tgt.Program decls ds assn' defs'
+  return $ Tgt.Program decls ds assn' defs'

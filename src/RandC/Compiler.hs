@@ -15,10 +15,10 @@ import Control.Monad
 
 compile :: Imp.Program -> VarGen Prism.Program
 compile =
-  return . I2D.compile      >=>
-           D2SSA.compile    >=>
-  return . SSA12.compile    >=>
-  return . SSA23.compile    >=>
-           Inlining.compile >=>
-  return . SSA2UPA.compile  >=>
-  return . UPA2P.compile
+  I2D.compile      >=>
+  D2SSA.compile    >=>
+  SSA12.compile    >=>
+  SSA23.compile    >=>
+  Inlining.compile >=>
+  SSA2UPA.compile  >=>
+  UPA2P.compile

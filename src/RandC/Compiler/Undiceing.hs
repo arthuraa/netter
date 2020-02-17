@@ -34,11 +34,13 @@ compileDepClass probs (vs, ds) assn =
             Just e  -> M.insert v <$> e <*> pure assn'
             Nothing -> return assn'
 
-compile :: Src.Program -> Tgt.Program
+compile :: Src.Program -> VarGen Tgt.Program
 compile (Src.Program decls probs assn defs) =
   let dcs = dependencies $ M.map dice assn
       decl v = case M.lookup v decls of
                  Just d  -> d
                  Nothing -> error "Unbound variable" in
 
-    Tgt.Program defs [(M.fromSet decl vs, compileDepClass probs dc assn) | dc@(vs, _) <- dcs]
+    return $ Tgt.Program defs [(M.fromSet decl vs,
+                                compileDepClass probs dc assn)
+                              | dc@(vs, _) <- dcs]

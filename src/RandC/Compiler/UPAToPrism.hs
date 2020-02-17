@@ -1,5 +1,6 @@
 module RandC.Compiler.UPAToPrism where
 
+import RandC.Var
 import qualified RandC.Prism.Expr as E
 import qualified RandC.UPA   as Src
 import qualified RandC.Prism as Tgt
@@ -16,8 +17,8 @@ compileModule (id, (decls, distr)) =
 
     Tgt.Module id decls' [trans $ assns `fmap` distr]
 
-compile :: Src.Program -> Tgt.Program
+compile :: Src.Program -> VarGen Tgt.Program
 compile (Src.Program defs mods) =
   let defs' = [Tgt.Formula v e | (v, e) <- M.assocs defs]
       mods' = map compileModule $ zip [0..] mods in
-  Tgt.Program defs' mods'
+  return $ Tgt.Program defs' mods'
