@@ -12,7 +12,7 @@ import qualified RandC.SSA3       as Src
 import qualified RandC.UPA        as Tgt
 
 import Control.Monad
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 type DepClass = (S.Set Var, S.Set Die)

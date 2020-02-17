@@ -11,7 +11,7 @@ import qualified RandC.Compiler as Compiler
 
 import Control.Monad.Except
 import Control.Monad.State
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 type Expr = PE.Expr
 

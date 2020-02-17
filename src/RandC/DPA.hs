@@ -3,7 +3,7 @@ module RandC.DPA where
 import RandC.Var
 import RandC.Dice.Expr
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pDice :: M.Map Die [Double]

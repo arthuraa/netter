@@ -5,7 +5,7 @@ import qualified RandC.Prism.Expr as E
 import qualified RandC.UPA   as Src
 import qualified RandC.Prism as Tgt
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 compileModule :: (Int, Src.Module) -> Tgt.Module
 compileModule (id, Src.Module decls distr) =

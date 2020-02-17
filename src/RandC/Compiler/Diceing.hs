@@ -8,7 +8,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp        as S
 import qualified RandC.Dice       as T
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Control.Monad.ST
 import Data.STRef
 

@@ -8,7 +8,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA3       as SSA3
 
 import Control.Monad.Reader
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 inline :: SSA3.Assn -> SSA3.Defs -> (SSA3.Assn, SSA3.Defs)
 inline assn defs =

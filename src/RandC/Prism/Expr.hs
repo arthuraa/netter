@@ -11,7 +11,7 @@ import RandC.Display
 import RandC.Var
 
 import Data.Functor.Identity
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 data Const = Num Int | Bool Bool

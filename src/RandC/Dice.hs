@@ -4,7 +4,7 @@ import RandC.Var
 import RandC.Display
 import qualified RandC.Dice.Expr  as DE
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 data Com = Skip
          | Assn Var DE.Expr

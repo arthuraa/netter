@@ -6,7 +6,7 @@ import RandC.P
 import RandC.Prism.Expr
 
 import Data.List (intersperse)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 newtype Assn = Assn (M.Map Var Expr)
   deriving (Show, Eq)

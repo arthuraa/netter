@@ -8,7 +8,7 @@ import qualified RandC.Dice      as Src
 import qualified RandC.SSA1      as Tgt
 
 import Control.Monad (foldM)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 compileCom :: Src.Com -> Pass (Tgt.Assn, Tgt.Defs)

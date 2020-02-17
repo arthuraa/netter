@@ -3,7 +3,7 @@ module RandC.Compiler.DToP where
 import qualified RandC.D as D
 import qualified RandC.P as P
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 addVal :: D.Valuation -> D.Die -> Int -> D.Valuation

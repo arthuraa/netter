@@ -3,7 +3,7 @@ module RandC.Dice.Expr where
 import RandC.Var
 import qualified RandC.Prism.Expr as PE
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 type Die = Int

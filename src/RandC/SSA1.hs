@@ -5,7 +5,7 @@ import RandC.Display
 import RandC.D
 import qualified RandC.Dice.Expr as DE
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 type Assn = M.Map Var Var
 type Defs = M.Map Var DE.Expr

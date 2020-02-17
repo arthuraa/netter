@@ -8,7 +8,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA1       as Src
 import qualified RandC.SSA2       as Tgt
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 compileExpr :: DE.Expr -> D PE.Expr
 compileExpr (DE.Var v) =

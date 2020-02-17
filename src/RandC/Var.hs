@@ -21,7 +21,7 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Functor.Identity
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 data Var = Var String Int
