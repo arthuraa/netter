@@ -1,6 +1,7 @@
 module RandC.Compiler.Undiceing where
 
 import RandC.Var
+import RandC.Options
 import RandC.Pass
 import RandC.D
 import RandC.P
@@ -42,6 +43,7 @@ compile (Src.Program decls probs assn defs) =
                  Just d  -> d
                  Nothing -> error "Unbound variable" in
 
+    ensureTarget UPA $
     return $ Tgt.Program defs [(M.fromSet decl vs,
                                 compileDepClass probs dc assn)
                               | dc@(vs, _) <- dcs]

@@ -1,5 +1,6 @@
 module RandC.Compiler.SSA1ToSSA2 where
 
+import RandC.Options
 import RandC.Pass
 import RandC.D
 import qualified RandC.Dice.Expr  as DE
@@ -25,4 +26,5 @@ compileExpr (DE.Choice d es) =
 
 compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program decls dice assn defs) =
+  ensureTarget SSA2 $
   return $ Tgt.Program decls dice assn (M.map compileExpr defs)

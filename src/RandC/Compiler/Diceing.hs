@@ -1,5 +1,6 @@
 module RandC.Compiler.Diceing where
 
+import RandC.Options
 import RandC.Pass
 import RandC.P
 import qualified RandC.Dice.Expr  as DE
@@ -24,7 +25,7 @@ compileExpr (PE.If e eThen eElse) =
   DE.If (compileExpr e) (compileExpr eThen) (compileExpr eElse)
 
 compile :: S.Program -> Pass T.Program
-compile (S.Program varDecls com) = return $ runST $ do
+compile (S.Program varDecls com) = ensureTarget Dice $ return $ runST $ do
   diceCount <- newSTRef 0
   dice      <- newSTRef M.empty
 

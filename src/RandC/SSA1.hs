@@ -1,6 +1,7 @@
 module RandC.SSA1 where
 
 import RandC.Var
+import RandC.Display
 import RandC.D
 import qualified RandC.Dice.Expr as DE
 
@@ -14,3 +15,6 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pAssn :: Assn
                        , pDefs :: Defs }
   deriving (Show, Eq)
+
+instance Display Program where
+  display = show

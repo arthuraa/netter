@@ -18,6 +18,13 @@ newtype Pass a =
             MonadError Result, MonadReader Options,
             MonadFresh)
 
+ensureTarget :: Display a => Target -> Pass a -> Pass a
+ensureTarget tgt pass = do
+  tgt' <- reader target
+  if tgt < tgt' then pass else do
+    res <- pass
+    throwError . Done . display $ res
+
 runPass :: Display a => Options -> Pass a -> IO ()
 runPass opts (Pass f) =
   let r = fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars in

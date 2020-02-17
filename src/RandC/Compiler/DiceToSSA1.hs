@@ -1,6 +1,7 @@
 module RandC.Compiler.DiceToSSA1 where
 
 import RandC.Var
+import RandC.Options
 import RandC.Pass
 import qualified RandC.Dice.Expr as DE
 import qualified RandC.Dice      as Src
@@ -54,6 +55,6 @@ compileCom (Src.If e cThen cElse) = do
   foldM mergeVar (M.empty, defs) $ S.toList vars
 
 compile :: Src.Program -> Pass Tgt.Program
-compile (Src.Program vars dice c) = do
+compile (Src.Program vars dice c) = ensureTarget SSA1 $ do
   (assn, defs) <- compileCom c
   return $ Tgt.Program vars dice assn defs

@@ -1,11 +1,13 @@
 module RandC.Compiler.Inlining where
 
 import RandC.Var
+import RandC.Options
 import RandC.Pass
 import RandC.D
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA3       as SSA3
 
+import Control.Monad.Reader
 import qualified Data.Map as M
 
 inline :: SSA3.Assn -> SSA3.Defs -> (SSA3.Assn, SSA3.Defs)
@@ -34,6 +36,9 @@ inline assn defs =
     if changed then inline assn' defs' else (assn', defs')
 
 compile :: SSA3.Program -> Pass SSA3.Program
-compile (SSA3.Program decls dice assn defs) =
-  let (assn', defs') = inline assn defs in
-  return $ SSA3.Program decls dice assn' defs'
+compile prog@(SSA3.Program decls dice assn defs) = do
+  inlining <- reader inlining
+  if inlining then
+    let (assn', defs') = inline assn defs in
+    return $ SSA3.Program decls dice assn' defs'
+  else return prog

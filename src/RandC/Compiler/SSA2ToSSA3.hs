@@ -1,6 +1,7 @@
 module RandC.Compiler.SSA2ToSSA3 where
 
 import RandC.Var
+import RandC.Options
 import RandC.Pass
 import RandC.D
 import qualified RandC.Prism.Expr as PE
@@ -62,4 +63,4 @@ inline assn defs =
 compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program decls ds assn defs) =
   let (assn', defs') = inline assn defs in
-  return $ Tgt.Program decls ds assn' defs'
+  ensureTarget SSA3 $ return $ Tgt.Program decls ds assn' defs'

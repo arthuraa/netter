@@ -1,6 +1,7 @@
 module RandC.Dice where
 
 import RandC.Var
+import RandC.Display
 import qualified RandC.Dice.Expr  as DE
 
 import qualified Data.Map as M
@@ -15,3 +16,6 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pDieDecls :: M.Map DE.Die [Double]
                        , pCom :: Com }
   deriving (Show, Eq)
+
+instance Display Program where
+  display = show
