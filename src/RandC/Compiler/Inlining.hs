@@ -13,10 +13,10 @@ import qualified Data.Map.Strict as M
 inline :: SSA3.Assn -> SSA3.Defs -> (SSA3.Assn, SSA3.Defs)
 inline assn defs =
   let count :: (Foldable t) => t (M.Map Var Int) -> M.Map Var Int
-      count      = foldl (<+>) M.empty
+      count      = foldl (|+|) M.empty
       assnCounts = count $ M.map (count . fmap PE.counts) assn
       defsCounts = count $ M.map PE.counts defs
-      cs         = assnCounts <+> defsCounts
+      cs         = assnCounts |+| defsCounts
 
       substAssn :: Var -> PE.Expr -> D PE.Expr -> D PE.Expr
       substAssn v e e' =

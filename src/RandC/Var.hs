@@ -13,7 +13,7 @@ module RandC.Var
    runVarGenT,
    novars,
    fresh,
-   (<+>)) where
+   (|+|)) where
 
 import RandC.Display
 
@@ -74,8 +74,8 @@ instance MonadFresh m => MonadFresh (ReaderT e m) where
 instance MonadFresh m => MonadFresh (StateT s m) where
   fresh x = StateT $ \s -> fresh x >>= \v -> return (v, s)
 
-(<+>) :: M.Map Var Int -> M.Map Var Int -> M.Map Var Int
-cs1 <+> cs2 =
+(|+|) :: M.Map Var Int -> M.Map Var Int -> M.Map Var Int
+cs1 |+| cs2 =
   let vs       = M.keysSet cs1 `S.union` M.keysSet cs2
       val cs v = M.findWithDefault 0 v cs in
   M.fromSet (\v -> val cs1 v + val cs2 v) vs

@@ -159,5 +159,5 @@ counts :: Expr -> M.Map Var Int
 counts (Var v)            = M.singleton v 1
 counts (Const _)          = M.empty
 counts (UnOp _ e)         = counts e
-counts (BinOp _ e1 e2)    = counts e1 <+> counts e2
-counts (If e eThen eElse) = counts e <+> counts eThen <+> counts eElse
+counts (BinOp _ e1 e2)    = counts e1 |+| counts e2
+counts (If e eThen eElse) = counts e |+| counts eThen |+| counts eElse
