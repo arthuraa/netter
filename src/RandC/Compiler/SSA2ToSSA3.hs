@@ -8,11 +8,12 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA2 as Src
 import qualified RandC.SSA3 as Tgt
 
+import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 varDeps :: Src.Defs -> Var -> S.Set Var
-varDeps es v = go S.empty [v]
+varDeps es start = go S.empty [start]
   where go visited [] =
           visited
         go visited (v : queue) =
@@ -21,7 +22,11 @@ varDeps es v = go S.empty [v]
                              Just e  -> foldl S.union S.empty $ fmap PE.vars e
                              Nothing -> S.empty
               toVisit    = directDeps `S.difference` visited' in
-            go visited' $ S.toList toVisit ++ queue
+            if start `S.member` directDeps then
+              error $ "SSA2ToSSA3: Found a definition cycle! " ++
+              show (pretty start) ++ " -> " ++ show (pretty v)
+            else
+              go visited' $ S.toList toVisit ++ queue
 
 dieDeps :: Src.Defs -> Var -> S.Set Die
 dieDeps es v =
