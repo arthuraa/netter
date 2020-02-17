@@ -15,8 +15,7 @@ module RandC.Var
    fresh,
    (|+|)) where
 
-import RandC.Display
-
+import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State
@@ -27,8 +26,8 @@ import qualified Data.Set as S
 data Var = Var String Int
   deriving (Show, Ord, Eq)
 
-instance Display Var where
-  display (Var x n) = x ++ "_" ++ show n
+instance Pretty Var where
+  pretty (Var x n) = pretty $ x ++ "_" ++ show n
 
 type Vars = M.Map String Int
 

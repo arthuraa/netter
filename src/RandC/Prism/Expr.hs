@@ -7,12 +7,13 @@ source language Imp.
 
 module RandC.Prism.Expr where
 
-import RandC.Display
+
 import RandC.Var
 
 import Data.Functor.Identity
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Text.Prettyprint.Doc
 
 data Const = Num Int | Bool Bool
   deriving (Show, Eq)
@@ -38,39 +39,41 @@ atomic (Var _)   = True
 atomic (Const _) = True
 atomic _         = False
 
-instance Display UnOp where
-  display Not = "!"
+instance Pretty UnOp where
+  pretty Not = pretty "!"
 
-instance Display BinOp where
-  display Plus = "+"
-  display Minus = "-"
-  display Times = "*"
-  display Div = "/"
-  display Eq = "="
-  display Leq = "<="
-  display Lt = "<"
-  display Or = "|"
-  display And = "&"
-  display Max = "max"
-  display Min = "min"
-  display Mod = "mod"
+instance Pretty BinOp where
+  pretty o = pretty $ go o
+    where go Plus  = "+"
+          go Minus = "-"
+          go Times = "*"
+          go Div   = "/"
+          go Eq    = "="
+          go Leq   = "<="
+          go Lt    = "<"
+          go Or    = "|"
+          go And   = "&"
+          go Max   = "max"
+          go Min   = "min"
+          go Mod   = "mod"
 
-instance Display Const where
-  display (Num n) = show n
-  display (Bool True) = "true"
-  display (Bool False) = "false"
+instance Pretty Const where
+  pretty (Num n) = pretty n
+  pretty (Bool True) = pretty "true"
+  pretty (Bool False) = pretty "false"
 
-instance Display Expr where
-  display (Var v) = display v
-  display (Const k) = display k
-  display (UnOp o e) = display o ++ display e
-  display (BinOp o e1 e2) =
-    let op = display o
-        x1 = display e1
-        x2 = display e2 in
-    if isInfix o then "(" ++ x1 ++ " " ++ op ++ " " ++ x2 ++ ")"
-    else op ++ "(" ++ x1 ++ "," ++ x2 ++ ")"
-  display (If cond eThen eElse) = "(" ++ display cond ++ " ? " ++ display eThen ++ " : " ++ display eElse ++ ")"
+instance Pretty Expr where
+  pretty (Var v) = pretty v
+  pretty (Const k) = pretty k
+  pretty (UnOp o e) = cat [pretty o, pretty e]
+  pretty (BinOp o e1 e2) =
+    let op = pretty o
+        x1 = pretty e1
+        x2 = pretty e2 in
+    if isInfix o then parens $ cat [x1, op, x2]
+    else cat [op, tupled [x1, x2]]
+  pretty (If cond eThen eElse) =
+    parens $ cat [pretty cond, pretty "?", pretty eThen, pretty ":", pretty eElse]
 
 -- Overload arthimatic operators
 instance Num Expr where
@@ -118,14 +121,14 @@ simplify2 o e1@(Const (Num n1)) e2@(Const (Num n2)) =
     Max   -> num  max
     Min   -> num  min
     Mod   -> num  mod
-    _     -> error $ "Expr: found ill-typed expression " ++ display (BinOp o e1 e2)
+    _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
   let bool f = Const $ Bool $ f b1 b2 in
   case o of
     Eq  -> bool (==)
     And -> bool (&&)
     Or  -> bool (||)
-    _   -> error $ "Expr: found ill-typed expression " ++ display (BinOp o e1 e2)
+    _   -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 Eq e1 e2
   | e1 == e2 = Const $ Bool $ True
 simplify2 Leq e1 e2

@@ -3,8 +3,8 @@ module RandC.Pass where
 
 import RandC.Var
 import RandC.Options
-import RandC.Display
 import Data.Functor.Identity
+import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
 import Control.Monad.Except
 
@@ -18,17 +18,17 @@ newtype Pass a =
             MonadError Result, MonadReader Options,
             MonadFresh)
 
-ensureTarget :: Display a => Target -> Pass a -> Pass a
+ensureTarget :: Pretty a => Target -> Pass a -> Pass a
 ensureTarget tgt pass = do
   tgt' <- reader target
   if tgt < tgt' then pass else do
     res <- pass
-    throwError . Done . display $ res
+    throwError . Done . show . pretty $ res
 
-runPass :: Display a => Options -> Pass a -> IO ()
+runPass :: Pretty a => Options -> Pass a -> IO ()
 runPass opts (Pass f) =
   let r = fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars in
     case r of
       Left  (Error e) -> putStrLn $ "Error: " ++ e
       Left  (Done  r) -> putStrLn r
-      Right r -> putStrLn $ display r
+      Right r -> putStrLn $ show $ pretty r

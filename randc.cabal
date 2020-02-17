@@ -69,7 +69,6 @@ library
     RandC.SSA2
     RandC.SSA3
     RandC.UPA
-    RandC.Display
     RandC.Compiler
     RandC.D
     RandC.G
@@ -85,6 +84,7 @@ library
   
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.9,
+                       prettyprinter >=1.6,
                        containers >= 0.6.0.0,
                        mtl >= 2.2.2
   

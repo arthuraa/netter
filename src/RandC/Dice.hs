@@ -1,9 +1,9 @@
 module RandC.Dice where
 
 import RandC.Var
-import RandC.Display
 import qualified RandC.Dice.Expr  as DE
 
+import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 
 data Com = Skip
@@ -17,5 +17,5 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pCom :: Com }
   deriving (Show, Eq)
 
-instance Display Program where
-  display = show
+instance Pretty Program where
+  pretty = viaShow

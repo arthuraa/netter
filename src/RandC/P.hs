@@ -1,9 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.P where
 
-import RandC.Display
-
-import Data.List (intersperse)
+import Data.Text.Prettyprint.Doc
 
 data P a = P { runP :: [(Double, a)] }
   deriving (Show, Eq, Functor)
@@ -18,10 +16,11 @@ instance Monad P where
 
   P xs >>= f = P [(px * pres, res) | (px, x) <- xs, (pres, res) <- runP $ f x]
 
-instance Display a => Display (P a) where
-  display (P []) =
+instance Pretty a => Pretty (P a) where
+  pretty (P []) =
     error "Cannot have an empty choice"
-  display (P [(_, x)]) =
-    display x
-  display (P probs) =
-    concat $ intersperse " + " [show p ++ " : " ++ display x | (p, x) <- probs]
+  pretty (P [(_, x)]) =
+    pretty x
+  pretty (P probs) =
+    cat $ punctuate (pretty " + ") [ pretty p <> pretty " : " <> pretty x
+                                   | (p, x) <- probs ]

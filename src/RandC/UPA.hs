@@ -1,11 +1,11 @@
 module RandC.UPA where
 
 import RandC.Var
-import RandC.Display
+
 import RandC.P
 import RandC.Prism.Expr
 
-import Data.List (intersperse)
+import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 
 newtype Assn = Assn (M.Map Var Expr)
@@ -18,23 +18,24 @@ data Program = Program { pDefs :: M.Map Var Expr
                        , pMods :: [Module] }
   deriving (Show, Eq)
 
-instance Display Assn where
-  display (Assn assns) =
-    concat $ intersperse " & " [ display v ++ " = " ++ display e
-                               | (v, e) <- M.assocs assns ]
+instance Pretty Assn where
+  pretty (Assn assns) =
+    hcat $ punctuate (pretty " & ") $ [ sep [pretty v, pretty "=", pretty e]
+                                      | (v, e) <- M.assocs assns ]
 
-instance Display Module where
-  display (Module decls assns) =
-    unlines $ [ "module" ] ++
-              [ doDecl v lb ub | (v, (lb, ub)) <- M.assocs decls ] ++
-              [ "transitions" ] ++
-              [ display assns ] ++
-              [ "endmodule" ]
+instance Pretty Module where
+  pretty (Module decls assns) =
+    vcat [ pretty "module"
+         , vcat [ doDecl v lb ub | (v, (lb, ub)) <- M.assocs decls ]
+         , pretty "transitions"
+         , pretty assns
+         , pretty "endmodule" ]
     where doDecl v lb ub =
-            concat ["var ", display v, " : [", show lb, "..", show ub, "]"]
+            sep [pretty "var", pretty v, pretty ":",
+                 brackets $ cat [pretty lb, pretty "..", pretty ub]]
 
-instance Display Program where
-  display (Program defs mods) =
-    unlines [ concat ["def ", display v, " = ", display e]
-            | (v, e) <- M.assocs defs] ++
-    unlines [ display m | m <- mods ]
+instance Pretty Program where
+  pretty (Program defs mods) =
+    vcat $ [ sep [pretty "def", pretty v, pretty "=", pretty e]
+           | (v, e) <- M.assocs defs] ++
+           map pretty mods
