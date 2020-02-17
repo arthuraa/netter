@@ -11,7 +11,7 @@ compileModule :: (Int, Src.Module) -> Tgt.Module
 compileModule (id, Src.Module decls distr) =
   let decls' = [Tgt.VarDecl v lb ub | (v, (lb, ub)) <- M.assocs decls]
 
-      assns (Src.Assn es) = [Tgt.Assn v e | (v, e) <- M.assocs es]
+      assns (Src.Assn es) = Tgt.Assns [Tgt.Assn v e | (v, e) <- M.assocs es]
 
       trans = Tgt.Transition (E.Const (E.Bool True)) in
 

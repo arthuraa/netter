@@ -16,13 +16,19 @@ data Assn = Assn { aLHS :: Var
 instance Pretty Assn where
   pretty (Assn v e) = parens $ sep [pretty v <> pretty "'", pretty "=", pretty e]
 
+newtype Assns = Assns [Assn]
+
+instance Pretty Assns where
+  pretty (Assns assns) =
+    encloseSep (pretty "") (pretty "") (pretty "&") $ map pretty assns
+
 -- Transitions
 --
 -- [step] c ->   p1 : (v11' = e11) & .. & (v1n' = e1n)
 --             + ..
 --             + pk : (vk1' = ek1) & .. & (vkl' = ekl);
 data Transition = Transition { tCond :: Expr
-                             , tAction :: P [Assn] }
+                             , tAction :: P Assns }
 
 instance Pretty Transition where
   pretty (Transition c probs) =

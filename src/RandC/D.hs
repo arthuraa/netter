@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.D where
 
+import Data.Text.Prettyprint.Doc
 import qualified Data.Set as S
 
 type Die = Int
@@ -19,6 +20,12 @@ instance Monad D where
   return = Return
   Return x >>= k = k x
   Choice d fs >>= k = Choice d [f >>= k | f <- fs]
+
+instance Pretty a => Pretty (D a) where
+  pretty (Return x) =
+    pretty x
+  pretty (Choice d xs) =
+    sep [pretty "choose", pretty d, hang 0 $ pretty xs]
 
 dice :: D a -> S.Set Die
 dice (Return _)    = S.empty
