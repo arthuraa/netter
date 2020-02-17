@@ -1,6 +1,7 @@
 module RandC.Compiler.DiceToSSA1 where
 
 import RandC.Var
+import RandC.Pass
 import qualified RandC.Dice.Expr as DE
 import qualified RandC.Dice      as Src
 import qualified RandC.SSA1      as Tgt
@@ -9,7 +10,7 @@ import Control.Monad (foldM)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-compileCom :: Src.Com -> VarGen (Tgt.Assn, Tgt.Defs)
+compileCom :: Src.Com -> Pass (Tgt.Assn, Tgt.Defs)
 compileCom Src.Skip =
   return (M.empty, M.empty)
 compileCom (Src.Assn v e) = do
@@ -52,7 +53,7 @@ compileCom (Src.If e cThen cElse) = do
 
   foldM mergeVar (M.empty, defs) $ S.toList vars
 
-compile :: Src.Program -> VarGen Tgt.Program
+compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program vars dice c) = do
   (assn, defs) <- compileCom c
   return $ Tgt.Program vars dice assn defs

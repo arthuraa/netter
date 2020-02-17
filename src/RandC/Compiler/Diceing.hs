@@ -1,6 +1,6 @@
 module RandC.Compiler.Diceing where
 
-import RandC.Var
+import RandC.Pass
 import RandC.P
 import qualified RandC.Dice.Expr  as DE
 import qualified RandC.Prism.Expr as PE
@@ -23,7 +23,7 @@ compileExpr (PE.BinOp o e1 e2) =
 compileExpr (PE.If e eThen eElse) =
   DE.If (compileExpr e) (compileExpr eThen) (compileExpr eElse)
 
-compile :: S.Program -> VarGen T.Program
+compile :: S.Program -> Pass T.Program
 compile (S.Program varDecls com) = return $ runST $ do
   diceCount <- newSTRef 0
   dice      <- newSTRef M.empty

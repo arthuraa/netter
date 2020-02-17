@@ -1,6 +1,7 @@
 module RandC.Compiler.Inlining where
 
 import RandC.Var
+import RandC.Pass
 import RandC.D
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA3       as SSA3
@@ -32,7 +33,7 @@ inline assn defs =
       (changed, assn', defs') = M.foldlWithKey scan (False, assn, defs) defs in
     if changed then inline assn' defs' else (assn', defs')
 
-compile :: SSA3.Program -> VarGen SSA3.Program
+compile :: SSA3.Program -> Pass SSA3.Program
 compile (SSA3.Program decls dice assn defs) =
   let (assn', defs') = inline assn defs in
   return $ SSA3.Program decls dice assn' defs'

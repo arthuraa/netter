@@ -3,10 +3,21 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
-module RandC.Var (Var, Vars, VarGen, VarGenT, name, runVarGenT, novars, fresh, (<+>)) where
+module RandC.Var
+  (Var,
+   Vars,
+   VarGen,
+   VarGenT(..),
+   MonadFresh,
+   name,
+   runVarGenT,
+   novars,
+   fresh,
+   (<+>)) where
 
 import RandC.Display
 
+import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Functor.Identity
@@ -56,6 +67,12 @@ instance MonadFresh m => MonadFresh (ExceptT e m) where
   fresh x = ExceptT $ do
     v <- fresh x
     return $ Right v
+
+instance MonadFresh m => MonadFresh (ReaderT e m) where
+  fresh x = ReaderT $ \_ -> fresh x
+
+instance MonadFresh m => MonadFresh (StateT s m) where
+  fresh x = StateT $ \s -> fresh x >>= \v -> return (v, s)
 
 (<+>) :: M.Map Var Int -> M.Map Var Int -> M.Map Var Int
 cs1 <+> cs2 =

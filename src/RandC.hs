@@ -2,12 +2,13 @@ module RandC where
 
 import RandC.P
 import RandC.Var
-import RandC.Display
+
+import RandC.Options
+import RandC.Pass
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
-import Data.Functor.Identity
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
@@ -17,14 +18,14 @@ type Expr = PE.Expr
 data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sComs :: [Imp.Com] }
 
-type Comp a = ExceptT String (VarGenT (StateT S Identity)) a
+type Comp a = StateT S Pass a
 
 num :: Int -> Expr
 num = PE.Const . PE.Num
 
 namedVar :: String -> Int -> Int -> Comp Expr
 namedVar x lb ub = do
-  when (lb > ub) $ throwError $
+  when (lb > ub) $ throwError $ Error $
     "Invalid bounds for variable " ++ x ++ ": " ++
     show lb ++ ">" ++ show ub
 
@@ -48,7 +49,7 @@ PE.Var v .<- rhs = do
   S decls coms <- get
   put $ S decls (Imp.Assn v rhs : coms)
 
-e .<- _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
+e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
 infix 1 .?
 (.?) :: Expr -> Expr -> Expr -> Expr
@@ -64,7 +65,7 @@ PE.Var v .<-$ rhs = do
   S decls coms <- get
   put $ S decls (Imp.Choice v (P rhs) : coms)
 
-e .<-$ _rhs = throwError $ "Attempt to assign to non-variable " ++ show e
+e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
 if' :: Expr -> Comp () -> Comp () -> Comp ()
 if' e cThen cElse = do
@@ -142,20 +143,10 @@ infix 4 .<
 (.<) :: Expr -> Expr -> Expr
 (.<) = PE.BinOp PE.Lt
 
-runComp :: Comp a -> (Imp.Program -> VarGen b) -> (Either String b)
-runComp prog f =
-  let prog'  = runVarGenT (runExceptT prog) novars in
-  let prog'' = runStateT  prog' $ S M.empty []  in
-  let ((res, vars), S decls coms)  = runIdentity prog'' in
-  case res of
-    Left error -> Left error
-    Right _ ->
-      let prog = Imp.Program decls (Imp.revSeq coms)
-          (tprog, _) = runIdentity $ runVarGenT (f prog) vars in
-        Right tprog
+compileWith :: Options -> Comp () -> IO ()
+compileWith opts prog = runPass opts $ do
+  ((), S decls coms) <- runStateT prog $ S M.empty []
+  Compiler.compile (Imp.Program decls (Imp.revSeq coms))
 
 compile :: Comp () -> IO ()
-compile prog =
-  case runComp prog Compiler.compile of
-    Left error -> putStrLn $ "Error: " ++ error
-    Right tprog -> putStrLn $ display tprog
+compile = compileWith defaults

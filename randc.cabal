@@ -52,6 +52,8 @@ library
     RandC
     RandC.Prism.Expr
     RandC.Var
+    RandC.Pass
+    RandC.Options
     RandC.Prism
     RandC.Dice.Expr
     RandC.Compiler.UPAToPrism

@@ -1,6 +1,6 @@
 module RandC.Compiler where
 
-import RandC.Var
+import RandC.Pass
 import qualified RandC.Imp                 as Imp
 import qualified RandC.Prism               as Prism
 import qualified RandC.Compiler.Diceing    as I2D
@@ -13,7 +13,7 @@ import qualified RandC.Compiler.UPAToPrism as UPA2P
 
 import Control.Monad
 
-compile :: Imp.Program -> VarGen Prism.Program
+compile :: Imp.Program -> Pass Prism.Program
 compile =
   I2D.compile      >=>
   D2SSA.compile    >=>

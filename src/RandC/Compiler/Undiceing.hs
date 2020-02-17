@@ -1,6 +1,7 @@
 module RandC.Compiler.Undiceing where
 
 import RandC.Var
+import RandC.Pass
 import RandC.D
 import RandC.P
 import RandC.Compiler.DToP
@@ -34,7 +35,7 @@ compileDepClass probs (vs, ds) assn =
             Just e  -> M.insert v <$> e <*> pure assn'
             Nothing -> return assn'
 
-compile :: Src.Program -> VarGen Tgt.Program
+compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program decls probs assn defs) =
   let dcs = dependencies $ M.map dice assn
       decl v = case M.lookup v decls of
