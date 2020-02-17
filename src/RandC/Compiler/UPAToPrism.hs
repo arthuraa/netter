@@ -8,10 +8,10 @@ import qualified RandC.Prism as Tgt
 import qualified Data.Map as M
 
 compileModule :: (Int, Src.Module) -> Tgt.Module
-compileModule (id, (decls, distr)) =
+compileModule (id, Src.Module decls distr) =
   let decls' = [Tgt.VarDecl v lb ub | (v, (lb, ub)) <- M.assocs decls]
 
-      assns es = [Tgt.Assn v e | (v, e) <- M.assocs es]
+      assns (Src.Assn es) = [Tgt.Assn v e | (v, e) <- M.assocs es]
 
       trans = Tgt.Transition (E.Const (E.Bool True)) in
 

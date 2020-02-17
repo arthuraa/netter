@@ -27,14 +27,14 @@ dependencies = M.foldrWithKey (\v ds -> addDeps (S.singleton v, ds)) []
             addDeps (vs `S.union` vs', ds `S.union` ds') rest
 
 compileDepClass ::
-  M.Map Die [Double] -> DepClass -> M.Map Var (D PE.Expr) -> P (M.Map Var PE.Expr)
+  M.Map Die [Double] -> DepClass -> M.Map Var (D PE.Expr) -> P Tgt.Assn
 compileDepClass probs (vs, ds) assn =
-  undice probs ds $ foldM addVar M.empty $ S.toList vs
-  where addVar :: M.Map Var PE.Expr -> Var -> D (M.Map Var PE.Expr)
-        addVar assn' v = do
+  undice probs ds $ foldM addVar (Tgt.Assn M.empty) $ S.toList vs
+  where addVar :: Tgt.Assn -> Var -> D Tgt.Assn
+        addVar (Tgt.Assn assn') v = do
           case M.lookup v assn of
-            Just e  -> M.insert v <$> e <*> pure assn'
-            Nothing -> return assn'
+            Just e  -> Tgt.Assn <$> (M.insert v <$> e <*> pure assn')
+            Nothing -> return $ Tgt.Assn assn'
 
 compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program decls probs assn defs) =
@@ -44,6 +44,6 @@ compile (Src.Program decls probs assn defs) =
                  Nothing -> error "Unbound variable" in
 
     ensureTarget UPA $
-    return $ Tgt.Program defs [(M.fromSet decl vs,
-                                compileDepClass probs dc assn)
+    return $ Tgt.Program defs [Tgt.Module (M.fromSet decl vs)
+                                (compileDepClass probs dc assn)
                               | dc@(vs, _) <- dcs]
