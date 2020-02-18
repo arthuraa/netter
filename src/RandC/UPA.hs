@@ -2,7 +2,7 @@ module RandC.UPA where
 
 import RandC.Var
 
-import RandC.P
+import RandC.Prob
 import RandC.Prism.Expr
 
 import Data.Text.Prettyprint.Doc

@@ -2,7 +2,7 @@ module RandC.Prism where
 
 import RandC.Var
 import RandC.Prism.Expr
-import RandC.P
+import RandC.Prob
 
 import Data.Text.Prettyprint.Doc
 

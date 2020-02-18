@@ -1,6 +1,6 @@
 module RandC where
 
-import RandC.P
+import RandC.Prob
 import RandC.Var
 
 import RandC.Options

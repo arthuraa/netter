@@ -2,8 +2,7 @@ module RandC.Compiler.Diceing where
 
 import RandC.Options
 import RandC.Pass
-import RandC.D
-import RandC.P
+import RandC.Prob
 import qualified RandC.Imp        as S
 import qualified RandC.Dice       as T
 

@@ -2,7 +2,7 @@ module RandC.Imp where
 
 import RandC.Var
 import RandC.Prism.Expr hiding (If)
-import RandC.P
+import RandC.Prob
 
 import qualified Data.Map.Strict as M
 

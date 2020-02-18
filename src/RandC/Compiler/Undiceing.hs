@@ -3,9 +3,7 @@ module RandC.Compiler.Undiceing where
 import RandC.Var
 import RandC.Options
 import RandC.Pass
-import RandC.D
-import RandC.P
-import RandC.Compiler.DToP
+import RandC.Prob
 
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA2       as Src

@@ -2,7 +2,7 @@ module RandC.SSA1 where
 
 import RandC.Var
 import RandC.Formatting
-import RandC.D
+import RandC.Prob
 import qualified RandC.Prism.Expr as PE
 
 import Data.Text.Prettyprint.Doc

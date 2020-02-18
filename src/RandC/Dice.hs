@@ -1,7 +1,7 @@
 module RandC.Dice where
 
 import RandC.Var
-import RandC.D
+import RandC.Prob
 import qualified RandC.Prism.Expr as PE
 
 import Data.Text.Prettyprint.Doc

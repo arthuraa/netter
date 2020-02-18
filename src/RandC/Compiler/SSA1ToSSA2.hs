@@ -3,7 +3,7 @@ module RandC.Compiler.SSA1ToSSA2 where
 import RandC.Var
 import RandC.Options
 import RandC.Pass
-import RandC.D
+import RandC.Prob
 import qualified RandC.Prism.Expr as PE
 import qualified RandC.SSA1 as Src
 import qualified RandC.SSA2 as Tgt

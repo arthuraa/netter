@@ -62,18 +62,16 @@ library
     RandC.Compiler.Inlining
     RandC.Compiler.Diceing
     RandC.Compiler.Undiceing
-    RandC.Compiler.DToP
     RandC.DPA
     RandC.SSA1
     RandC.SSA2
     RandC.UPA
     RandC.Compiler
-    RandC.D
+    RandC.Prob
     RandC.G
     RandC.Dice
     RandC.Imp
-    RandC.P
-  
+
   -- Modules included in this library but not exported.
   -- other-modules:
 
