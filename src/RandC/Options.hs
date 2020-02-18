@@ -9,8 +9,9 @@ data Target = Imp
   deriving (Ord, Eq)
 
 data Options = Options { target   :: Target
-                       , inlining :: Bool }
+                       , inlining :: Bool
+                       , simplify :: Bool }
   deriving (Ord, Eq)
 
 defaults :: Options
-defaults = Options Prism True
+defaults = Options Prism True True

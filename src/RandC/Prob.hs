@@ -21,6 +21,15 @@ reshape ds (Choice d xs) =
     Nothing -> Choice d [reshape (M.insert d i ds) x
                         | (x, i) <- zip xs [0..] ]
 
+-- Remove redundant die throws
+prune :: Eq a => D a -> D a
+prune (Return x)    = Return x
+prune (Choice d xs) = case map prune xs of
+                        [] -> error "Prob: Assertion failed: Empty choice."
+                        xs'@(x : xs'') ->
+                          if all (== x) xs'' then x
+                          else Choice d xs'
+
 instance Applicative D where
   pure = Return
   f <*> x = reshape M.empty $ go f x
