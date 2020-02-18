@@ -8,7 +8,7 @@ import RandC.P
 import RandC.Compiler.DToP
 
 import qualified RandC.Prism.Expr as PE
-import qualified RandC.SSA3       as Src
+import qualified RandC.SSA2       as Src
 import qualified RandC.UPA        as Tgt
 
 import Control.Monad

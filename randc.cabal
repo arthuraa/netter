@@ -56,11 +56,9 @@ library
     RandC.Options
     RandC.Formatting
     RandC.Prism
-    RandC.Dice.Expr
     RandC.Compiler.UPAToPrism
     RandC.Compiler.DiceToSSA1
     RandC.Compiler.SSA1ToSSA2
-    RandC.Compiler.SSA2ToSSA3
     RandC.Compiler.Inlining
     RandC.Compiler.Diceing
     RandC.Compiler.Undiceing
@@ -68,7 +66,6 @@ library
     RandC.DPA
     RandC.SSA1
     RandC.SSA2
-    RandC.SSA3
     RandC.UPA
     RandC.Compiler
     RandC.D

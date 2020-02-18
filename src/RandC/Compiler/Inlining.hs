@@ -5,12 +5,12 @@ import RandC.Options
 import RandC.Pass
 import RandC.D
 import qualified RandC.Prism.Expr as PE
-import qualified RandC.SSA3       as SSA3
+import qualified RandC.SSA2       as SSA2
 
 import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 
-inline :: SSA3.Assn -> SSA3.Defs -> (SSA3.Assn, SSA3.Defs)
+inline :: SSA2.Assn -> SSA2.Defs -> (SSA2.Assn, SSA2.Defs)
 inline assn defs =
   let count :: (Foldable t) => t (M.Map Var Int) -> M.Map Var Int
       count      = foldl (|+|) M.empty
@@ -35,10 +35,10 @@ inline assn defs =
       (changed, assn', defs') = M.foldlWithKey scan (False, assn, defs) defs in
     if changed then inline assn' defs' else (assn', defs')
 
-compile :: SSA3.Program -> Pass SSA3.Program
-compile prog@(SSA3.Program decls dice assn defs) = do
+compile :: SSA2.Program -> Pass SSA2.Program
+compile prog@(SSA2.Program decls dice assn defs) = do
   inlining <- reader inlining
   if inlining then
     let (assn', defs') = inline assn defs in
-    return $ SSA3.Program decls dice assn' defs'
+    return $ SSA2.Program decls dice assn' defs'
   else return prog

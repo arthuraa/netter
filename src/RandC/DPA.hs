@@ -1,7 +1,8 @@
 module RandC.DPA where
 
 import RandC.Var
-import RandC.Dice.Expr
+import RandC.D
+import RandC.Prism.Expr
 
 import qualified Data.Map.Strict as M
 

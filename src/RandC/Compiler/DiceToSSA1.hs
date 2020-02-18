@@ -3,9 +3,9 @@ module RandC.Compiler.DiceToSSA1 where
 import RandC.Var
 import RandC.Options
 import RandC.Pass
-import qualified RandC.Dice.Expr as DE
-import qualified RandC.Dice      as Src
-import qualified RandC.SSA1      as Tgt
+import qualified RandC.Prism.Expr as PE
+import qualified RandC.Dice       as Src
+import qualified RandC.SSA1       as Tgt
 
 import Control.Monad (foldM)
 import qualified Data.Map.Strict as M
@@ -23,9 +23,9 @@ compileCom (Src.Seq c1 c2) = do
 
   let assn = M.unionWith (\_ v -> v) assn1 assn2
 
-  let getVar1 v = DE.Var $ M.findWithDefault v v assn1
+  let getVar1 v = PE.Var $ M.findWithDefault v v assn1
 
-  let defs2' = M.map (DE.subst getVar1) defs2
+  let defs2' = M.map (fmap $ PE.subst getVar1) defs2
 
   let defs   = M.union defs1 defs2'
 
@@ -40,8 +40,8 @@ compileCom (Src.If e cThen cElse) = do
         case (M.lookup v assnThen, M.lookup v assnElse) of
           (Just vThen, Just vElse) -> do
             v' <- fresh (name v)
-            let ve' = DE.If (DE.Var ve) (DE.Var vThen) (DE.Var vElse)
-            return (M.insert v v' assn, M.insert v' ve' defs)
+            let ve' = PE.If (PE.Var ve) (PE.Var vThen) (PE.Var vElse)
+            return (M.insert v v' assn, M.insert v' (return ve') defs)
           (Just v', _) -> do
             return (M.insert v v' assn, defs)
           (_, Just v') -> do

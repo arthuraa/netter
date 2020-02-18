@@ -2,27 +2,14 @@ module RandC.Compiler.Diceing where
 
 import RandC.Options
 import RandC.Pass
+import RandC.D
 import RandC.P
-import qualified RandC.Dice.Expr  as DE
-import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp        as S
 import qualified RandC.Dice       as T
 
 import qualified Data.Map.Strict as M
 import Control.Monad.ST
 import Data.STRef
-
-compileExpr :: PE.Expr -> DE.Expr
-compileExpr (PE.Var v) =
-  DE.Var v
-compileExpr (PE.Const c) =
-  DE.Const c
-compileExpr (PE.UnOp o e) =
-  DE.UnOp o (compileExpr e)
-compileExpr (PE.BinOp o e1 e2) =
-  DE.BinOp o (compileExpr e1) (compileExpr e2)
-compileExpr (PE.If e eThen eElse) =
-  DE.If (compileExpr e) (compileExpr eThen) (compileExpr eElse)
 
 compile :: S.Program -> Pass T.Program
 compile (S.Program varDecls com) = ensureTarget Dice $ return $ runST $ do
@@ -40,7 +27,7 @@ compile (S.Program varDecls com) = ensureTarget Dice $ return $ runST $ do
         return $ T.Skip
 
       compileCom (S.Assn v e) =
-        return $ T.Assn v (compileExpr e)
+        return $ T.Assn v (return e)
 
       compileCom (S.Seq c1 c2) = do
         c1' <- compileCom c1
@@ -50,11 +37,11 @@ compile (S.Program varDecls com) = ensureTarget Dice $ return $ runST $ do
       compileCom (S.If e cThen cElse) = do
         cThen' <- compileCom cThen
         cElse' <- compileCom cElse
-        return $ T.If (compileExpr e) cThen' cElse'
+        return $ T.If (return e) cThen' cElse'
 
       compileCom (S.Choice v (P es)) = do
         d <- newDie $ map fst es
-        return $ T.Assn v (DE.Choice d [compileExpr e | (_, e) <- es])
+        return $ T.Assn v (Choice d [return e | (_, e) <- es])
 
   com' <- compileCom com
   ds   <- readSTRef dice

@@ -1,19 +1,20 @@
 module RandC.Dice where
 
 import RandC.Var
-import qualified RandC.Dice.Expr  as DE
+import RandC.D
+import qualified RandC.Prism.Expr as PE
 
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 
 data Com = Skip
-         | Assn Var DE.Expr
+         | Assn Var (D PE.Expr)
          | Seq Com Com
-         | If DE.Expr Com Com
+         | If (D PE.Expr) Com Com
   deriving (Show, Eq)
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
-                       , pDieDecls :: M.Map DE.Die [Double]
+                       , pDieDecls :: M.Map Die [Double]
                        , pCom :: Com }
   deriving (Show, Eq)
 
