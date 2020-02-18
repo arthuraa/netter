@@ -12,15 +12,26 @@ data D a = Return a
          | Choice Die [D a]
   deriving (Show, Eq, Functor, Traversable, Foldable)
 
+reshape :: M.Map Die Int -> D a -> D a
+reshape _ (Return x) =
+  Return x
+reshape ds (Choice d xs) =
+  case M.lookup d ds of
+    Just i  -> reshape ds $ xs !! i
+    Nothing -> Choice d [reshape (M.insert d i ds) x
+                        | (x, i) <- zip xs [0..] ]
+
 instance Applicative D where
   pure = Return
-  Return f <*> x = fmap f x
-  Choice d fs <*> x = Choice d [f <*> x | f <- fs]
+  f <*> x = reshape M.empty $ go f x
+    where go (Return f)    x = fmap f x
+          go (Choice d fs) x = Choice d [go f x | f <- fs]
 
 instance Monad D where
-  return = Return
-  Return x >>= k = k x
-  Choice d fs >>= k = Choice d [f >>= k | f <- fs]
+  return  = Return
+  x >>= k = reshape M.empty $ go x
+    where go (Return x)    = k x
+          go (Choice d xs) = Choice d $ map go xs
 
 instance Pretty a => Pretty (D a) where
   pretty (Return x) =
