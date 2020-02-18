@@ -43,7 +43,9 @@ data VarDecl = VarDecl { vName :: Var
 
 instance Pretty VarDecl where
   pretty (VarDecl v lb ub) =
-    sep [pretty v, pretty ":", brackets $ cat [pretty lb, pretty "..", pretty ub]]
+    sep [pretty v,
+         pretty ":", brackets $ cat [pretty lb, pretty "..", pretty ub]]
+    <> pretty ";"
 
 -- Module
 --
