@@ -24,19 +24,22 @@ doInlining assn defs =
 
       substAssn :: Var -> PE.Expr -> D PE.Expr -> D PE.Expr
       substAssn v e e' =
-        e' >>= PE.subst1M v (return e)
+        PE.subst1M v (return e) =<< e'
 
       canInline v e =
         M.findWithDefault 0 v cs <= 1 || PE.atomic e
 
-      scan (changed, assn, defs) v e =
-        if canInline v e then
-          let assn' = M.map (substAssn v e) assn
-              defs' = M.map (PE.subst1 v e) (M.delete v defs) in
-            (True, assn', defs')
-        else (changed, assn, defs)
+      scan (changed, assn, defs) v =
+        case M.lookup v defs of
+          Just e ->
+            if canInline v e then
+              let assn' = M.map (substAssn v e) assn
+                  defs' = M.map (PE.subst1 v e) (M.delete v defs) in
+                (True, assn', defs')
+            else (changed, assn, defs)
+          Nothing -> (changed, assn, defs)
 
-  in M.foldlWithKey scan (False, assn, defs) defs
+  in foldl scan (False, assn, defs) $ M.keysSet defs
 
 optimize :: Bool -> Bool -> SSA2.Assn -> SSA2.Defs -> (SSA2.Assn, SSA2.Defs)
 optimize simplify inlining assn defs =
