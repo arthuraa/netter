@@ -35,13 +35,13 @@ compileDepClass probs (vs, ds) assn =
             Nothing -> return $ Tgt.Assn assn'
 
 compile :: Src.Program -> Pass Tgt.Program
-compile (Src.Program decls probs assn defs) =
+compile prog = do
+  Src.Program decls probs assn defs <- ensureTarget UPA prog
   let dcs = dependencies $ M.map dice assn
       decl v = case M.lookup v decls of
                  Just d  -> d
-                 Nothing -> error "Unbound variable" in
+                 Nothing -> error "Unbound variable"
 
-    ensureTarget UPA $
-    return $ Tgt.Program defs [Tgt.Module (M.fromSet decl vs)
-                                (compileDepClass probs dc assn)
-                              | dc@(vs, _) <- dcs]
+  return $ Tgt.Program defs [Tgt.Module (M.fromSet decl vs)
+                             (compileDepClass probs dc assn)
+                            | dc@(vs, _) <- dcs]

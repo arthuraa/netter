@@ -66,6 +66,7 @@ inline assn defs =
     (M.map (fmap PE.simplify) assn', M.map PE.simplify detVars)
 
 compile :: Src.Program -> Pass Tgt.Program
-compile (Src.Program decls ds assn defs) =
-  let (assn', defs') = inline assn defs in
-  ensureTarget SSA2 $ return $ Tgt.Program decls ds assn' defs'
+compile prog = do
+  Src.Program decls ds assn defs <- ensureTarget SSA2 prog
+  let (assn', defs') = inline assn defs
+  return $ Tgt.Program decls ds assn' defs'

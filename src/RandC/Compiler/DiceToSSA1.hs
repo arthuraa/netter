@@ -55,6 +55,7 @@ compileCom (Src.If e cThen cElse) = do
   foldM mergeVar (M.empty, defs) $ S.toList vars
 
 compile :: Src.Program -> Pass Tgt.Program
-compile (Src.Program vars dice c) = ensureTarget SSA1 $ do
+compile prog = do
+  Src.Program vars dice c <- ensureTarget SSA1 prog
   (assn, defs) <- compileCom c
   return $ Tgt.Program vars dice assn defs

@@ -18,12 +18,11 @@ newtype Pass a =
             MonadError Result, MonadReader Options,
             MonadFresh)
 
-ensureTarget :: Pretty a => Target -> Pass a -> Pass a
-ensureTarget tgt pass = do
-  tgt' <- reader target
-  if tgt < tgt' then pass else do
-    res <- pass
-    throwError . Done . show . pretty $ res
+ensureTarget :: Pretty a => Target -> a -> Pass a
+ensureTarget curTgt res = do
+  endTgt <- reader target
+  if curTgt <= endTgt then return res
+    else throwError . Done . show . pretty $ res
 
 runPass :: Pretty a => Options -> Pass a -> IO ()
 runPass opts (Pass f) =
