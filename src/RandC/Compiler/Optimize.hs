@@ -10,8 +10,12 @@ import qualified RandC.SSA2       as SSA2
 import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 
-inline :: Bool -> SSA2.Assn -> SSA2.Defs -> (SSA2.Assn, SSA2.Defs)
-inline simplify assn defs =
+doSimplify :: SSA2.Assn -> SSA2.Defs -> (SSA2.Assn, SSA2.Defs)
+doSimplify assn defs =
+  (M.map (prune . fmap PE.simplify) assn, M.map PE.simplify defs)
+
+doInlining :: SSA2.Assn -> SSA2.Defs -> (Bool, SSA2.Assn, SSA2.Defs)
+doInlining assn defs =
   let count :: (Foldable t) => t (M.Map Var Int) -> M.Map Var Int
       count      = foldl (|+|) M.empty
       assnCounts = count $ M.map (count . fmap PE.counts) assn
@@ -32,21 +36,20 @@ inline simplify assn defs =
             (True, assn', defs')
         else (changed, assn, defs)
 
-      (changed, assn', defs') = M.foldlWithKey scan (False, assn, defs) defs
+  in M.foldlWithKey scan (False, assn, defs) defs
 
-      (assn'', defs'') =
-        if simplify then
-          (M.map (prune . fmap PE.simplify) assn', M.map PE.simplify defs')
-        else (assn', defs')
-
-  in
-    if changed then inline simplify assn'' defs'' else (assn'', defs'')
+optimize :: Bool -> Bool -> SSA2.Assn -> SSA2.Defs -> (SSA2.Assn, SSA2.Defs)
+optimize simplify inlining assn defs =
+  let (assn1, defs1) =
+        if simplify then doSimplify assn defs else (assn, defs)
+      (changed, assn2, defs2) =
+        if inlining then doInlining assn1 defs1 else (False, assn1, defs1) in
+    if changed then optimize simplify inlining assn2 defs2
+    else (assn2, defs2)
 
 compile :: SSA2.Program -> Pass SSA2.Program
-compile prog@(SSA2.Program decls dice assn defs) = do
+compile (SSA2.Program decls dice assn defs) = do
   inlining <- reader inlining
   simplify <- reader simplify
-  if inlining then
-    let (assn', defs') = inline simplify assn defs in
-    return $ SSA2.Program decls dice assn' defs'
-  else return prog
+  let (assn', defs') = optimize simplify inlining assn defs
+  return $ SSA2.Program decls dice assn' defs'
