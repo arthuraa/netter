@@ -18,6 +18,7 @@ data Options = Options { target   :: Target
 
 readOptions :: IO Options
 readOptions =
-  cmdArgs Options { target   = Prism &= help "Output format"
-                  , inlining = True  &= help "Perform inlining"
-                  , simplify = True  &= help "Perform simplifications" }
+  cmdArgs $ Options { target   = Prism &= help "Output format"
+                    , inlining = True  &= help "Perform inlining"
+                    , simplify = True  &= help "Perform simplifications" }
+          &= summary "randc v0.1"
