@@ -36,17 +36,12 @@ compileCom (Src.If e cThen cElse) = do
 
   ve <- fresh "c"
 
-  let mergeVar (assn, defs) v =
-        case (M.lookup v assnThen, M.lookup v assnElse) of
-          (Just vThen, Just vElse) -> do
-            v' <- fresh (name v)
-            let ve' = PE.If (PE.Var ve) (PE.Var vThen) (PE.Var vElse)
-            return (M.insert v v' assn, M.insert v' (return ve') defs)
-          (Just v', _) -> do
-            return (M.insert v v' assn, defs)
-          (_, Just v') -> do
-            return (M.insert v v' assn, defs)
-          (_, _) -> error "DiceToSSA: Attempted to merge inexisting variable"
+  let mergeVar (assn, defs) v = do
+        v' <- fresh (name v)
+        let vThen = M.findWithDefault v v assnThen
+        let vElse = M.findWithDefault v v assnElse
+        let ve' = PE.If (PE.Var ve) (PE.Var vThen) (PE.Var vElse)
+        return (M.insert v v' assn, M.insert v' (return ve') defs)
 
   let defs = M.unions [defsThen, defsElse, M.singleton ve e]
 
