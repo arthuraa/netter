@@ -21,4 +21,5 @@ readOptions =
   cmdArgs $ Options { target   = Prism &= help "Output format"
                     , inlining = True  &= help "Perform inlining"
                     , simplify = True  &= help "Perform simplifications" }
+          &= program "randc"
           &= summary "randc v0.1"
