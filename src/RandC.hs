@@ -149,4 +149,6 @@ compileWith opts prog = runPass opts $ do
   Compiler.compile (Imp.Program decls (Imp.revSeq coms))
 
 compile :: Comp () -> IO ()
-compile = compileWith defaults
+compile prog = do
+  opts <- readOptions
+  compileWith opts prog

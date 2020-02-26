@@ -82,6 +82,7 @@ library
   build-depends:       base >=4.9,
                        prettyprinter >=1.6,
                        containers >= 0.6.0.0,
+                       cmdargs >= 0.10.20,
                        mtl >= 2.2.2
   
   -- Directories containing source files.
