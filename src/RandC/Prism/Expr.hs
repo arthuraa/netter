@@ -1,3 +1,7 @@
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-
 
 This module contains the grammar of Prism expressions, which is shared with our
@@ -10,29 +14,65 @@ module RandC.Prism.Expr where
 
 import RandC.Var
 
+import GHC.Generics
+import Data.HashCons
 import Data.Functor.Identity
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text.Prettyprint.Doc
 
 data Const = Num Int | Bool Bool
-  deriving (Show, Eq)
+  deriving (Show, Ord, Eq, Generic)
+
+instance Hashable Const
 
 data UnOp = Not
-  deriving (Show, Eq)
+  deriving (Show, Ord, Eq, Generic)
+
+instance Hashable UnOp
 
 data BinOp = Plus | Minus | Times | Div | Eq | Leq | Lt | Or | And | Max | Min | Mod
-  deriving (Show, Eq)
+  deriving (Show, Ord, Eq, Generic)
+
+instance Hashable BinOp
 
 isInfix :: BinOp -> Bool
 isInfix o = o `elem` [Plus, Minus, Times, Div, Leq, Lt, Eq, Or, And]
 
-data Expr = Var Var
-          | Const Const
-          | UnOp UnOp Expr
-          | BinOp BinOp Expr Expr
-          | If Expr Expr Expr
-  deriving (Show, Eq)
+newtype Expr = Expr (HC Expr')
+  deriving (Show, Ord, Eq, Generic, Hashable)
+
+data Expr' = Var' !Var
+           | Const' !Const
+           | UnOp' !UnOp !Expr
+           | BinOp' !BinOp !Expr !Expr
+           | If' !Expr !Expr !Expr
+  deriving (Show, Ord, Eq, Generic)
+
+instance Hashable Expr'
+
+instance HashCons Expr'
+
+{-# COMPLETE Var, Const, UnOp, BinOp, If #-}
+pattern Var :: Var -> Expr
+pattern Var x <- Expr (getVal -> Var' x)
+  where Var x = Expr (hc $ Var' x)
+
+pattern Const :: Const -> Expr
+pattern Const c <- Expr (getVal -> Const' c)
+  where Const c = Expr (hc $ Const' c)
+
+pattern UnOp :: UnOp -> Expr -> Expr
+pattern UnOp o e <- Expr (getVal -> UnOp' o e)
+  where UnOp o e = Expr (hc $ UnOp' o e)
+
+pattern BinOp :: BinOp -> Expr -> Expr -> Expr
+pattern BinOp o e1 e2 <- Expr (getVal -> BinOp' o e1 e2)
+  where BinOp o e1 e2 = Expr (hc $ BinOp' o e1 e2)
+
+pattern If :: Expr -> Expr -> Expr -> Expr
+pattern If e e1 e2 <- Expr (getVal -> If' e e1 e2)
+  where If e e1 e2 = Expr (hc $ If' e e1 e2)
 
 atomic :: Expr -> Bool
 atomic (Var _)   = True
