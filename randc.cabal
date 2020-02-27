@@ -82,6 +82,7 @@ library
   build-depends:       base >=4.9,
                        cmdargs >= 0.10.20,
                        containers >= 0.6.0.0,
+                       hashcons >= 0.1.0,
                        mtl >= 2.2.2,
                        prettyprinter >=1.6,
                        text >= 1.2.3.1

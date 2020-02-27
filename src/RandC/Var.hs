@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -15,6 +16,8 @@ module RandC.Var
    fresh,
    (|+|)) where
 
+import GHC.Generics
+import Data.HashCons
 import Data.Text
 import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
@@ -24,16 +27,25 @@ import Data.Functor.Identity
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-data Var = Var !Text !Int
-  deriving (Show, Ord, Eq)
+data Var' = Var' !Text !Int
+  deriving (Show, Ord, Eq, Generic)
+
+instance Hashable Var'
+
+instance HashCons Var'
+
+newtype Var = Var (HC Var')
+  deriving (Show, Ord, Eq, Generic, Hashable)
 
 instance Pretty Var where
-  pretty (Var x n) = pretty x <> pretty "_" <> pretty n
+  pretty (Var v) = pretty x <> pretty "_" <> pretty n
+    where Var' x n = getVal v
 
 type Vars = M.Map Text Int
 
 name :: Var -> Text
-name (Var x _) = x
+name (Var v) = x
+  where Var' x _ = getVal v
 
 novars :: Vars
 novars = M.empty
@@ -54,7 +66,7 @@ instance Monad m => MonadFresh (VarGenT m) where
     vs <- get
     let n = M.findWithDefault 0 x vs
     put $ M.insert x (n + 1) vs
-    return $ Var x n
+    return $ Var $ hc $ Var' x n
 
 instance MonadState s m => MonadState s (VarGenT m) where
   state f = VarGenT $ StateT $ \vs -> do
