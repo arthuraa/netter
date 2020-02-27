@@ -15,6 +15,7 @@ module RandC.Var
    fresh,
    (|+|)) where
 
+import Data.Text
 import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
 import Control.Monad.Except
@@ -23,15 +24,15 @@ import Data.Functor.Identity
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-data Var = Var String Int
+data Var = Var !Text !Int
   deriving (Show, Ord, Eq)
 
 instance Pretty Var where
-  pretty (Var x n) = pretty $ x ++ "_" ++ show n
+  pretty (Var x n) = pretty x <> pretty "_" <> pretty n
 
-type Vars = M.Map String Int
+type Vars = M.Map Text Int
 
-name :: Var -> String
+name :: Var -> Text
 name (Var x _) = x
 
 novars :: Vars
@@ -46,7 +47,7 @@ runVarGenT (VarGenT f) vs = runStateT f vs
 type VarGen a = VarGenT Identity a
 
 class Monad m => MonadFresh m where
-  fresh :: String -> m Var
+  fresh :: Text -> m Var
 
 instance Monad m => MonadFresh (VarGenT m) where
   fresh x = VarGenT $ do

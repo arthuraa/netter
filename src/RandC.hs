@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module RandC where
 
 import RandC.Prob
@@ -9,6 +10,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
+import Data.Text
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map.Strict as M
@@ -23,10 +25,10 @@ type Comp a = StateT S Pass a
 num :: Int -> Expr
 num = PE.Const . PE.Num
 
-namedVar :: String -> Int -> Int -> Comp Expr
+namedVar :: Text -> Int -> Int -> Comp Expr
 namedVar x lb ub = do
   when (lb > ub) $ throwError $ Error $
-    "Invalid bounds for variable " ++ x ++ ": " ++
+    "Invalid bounds for variable " ++ unpack x ++ ": " ++
     show lb ++ ">" ++ show ub
 
   v <- fresh x

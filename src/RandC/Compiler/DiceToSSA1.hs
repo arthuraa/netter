@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module RandC.Compiler.DiceToSSA1 where
 
 import RandC.Var
