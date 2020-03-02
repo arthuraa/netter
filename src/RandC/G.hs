@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.G where
 
+import Data.Text.Prettyprint.Doc
 import qualified RandC.Prism.Expr as E
 
 data G a = Return a
@@ -16,3 +17,9 @@ instance Monad G where
   return = Return
   Return x >>= k = k x
   If e x1 x2 >>= k = If e (x1 >>= k) (x2 >>= k)
+
+instance Pretty a => Pretty (G a) where
+  pretty (Return x) =
+    pretty x
+  pretty (If e x y) =
+    sep [ pretty e, pretty "?", parens (pretty x), pretty ":", parens (pretty y) ]

@@ -57,19 +57,15 @@ library
     RandC.Formatting
     RandC.Prism
     RandC.Compiler.UPAToPrism
-    RandC.Compiler.DiceToSSA1
-    RandC.Compiler.SSA1ToSSA2
-    RandC.Compiler.Optimize
-    RandC.Compiler.Diceing
-    RandC.Compiler.Undiceing
-    RandC.DPA
-    RandC.SSA1
-    RandC.SSA2
+    RandC.Compiler.ImpToSeq
+    RandC.Compiler.SeqToCFG
+    RandC.Compiler.CFGToUPA
+    RandC.Seq
+    RandC.CFG
     RandC.UPA
     RandC.Compiler
     RandC.Prob
     RandC.G
-    RandC.Dice
     RandC.Imp
 
   -- Modules included in this library but not exported.

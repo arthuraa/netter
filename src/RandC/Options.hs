@@ -4,9 +4,8 @@ module RandC.Options where
 import System.Console.CmdArgs.Implicit
 
 data Target = Imp
-            | Dice
-            | SSA1
-            | SSA2
+            | Seq
+            | CFG
             | UPA
             | Prism
   deriving (Ord, Eq, Read, Show, Data, Typeable)
