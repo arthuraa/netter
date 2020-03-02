@@ -19,6 +19,8 @@ instance Pretty Assn where
 newtype Assns = Assns [Assn]
 
 instance Pretty Assns where
+  pretty (Assns []) =
+    pretty "true"
   pretty (Assns assns) =
     encloseSep (pretty "") (pretty "") (pretty "&") $ map pretty assns
 
