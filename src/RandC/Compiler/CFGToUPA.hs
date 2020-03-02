@@ -20,10 +20,10 @@ compile prog = do
   Src.Program decls maxId blocks <- ensureTarget UPA prog
   pc <- fresh "pc"
   let check n = BinOp Eq (Var pc) (Const (Num n))
-  let actions = [ (check n, fmap Tgt.Assn assns)
+  let actions = [ (check n, fmap (Tgt.Assn . fmap PE.simplify) assns)
                 | (n, Src.Block assns _) <- M.assocs blocks ]
   let varModule = Tgt.Module decls actions
-  let pcAssn nextPc = M.singleton pc (compileNextPc nextPc)
+  let pcAssn nextPc = M.singleton pc (PE.simplify $ compileNextPc nextPc)
   let pcActions = [ (check n, return $ Tgt.Assn $ pcAssn nextPc)
                   | (n, Src.Block _ nextPc) <- M.assocs blocks ]
   let pcModule = Tgt.Module (M.singleton pc (0, maxId - 1)) pcActions
