@@ -57,10 +57,8 @@ library
     RandC.Formatting
     RandC.Prism
     RandC.Compiler.UPAToPrism
-    RandC.Compiler.ImpToSeq
-    RandC.Compiler.SeqToCFG
+    RandC.Compiler.ImpToCFG
     RandC.Compiler.CFGToUPA
-    RandC.Seq
     RandC.CFG
     RandC.UPA
     RandC.Compiler

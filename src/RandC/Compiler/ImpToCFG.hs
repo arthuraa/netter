@@ -1,9 +1,9 @@
-module RandC.Compiler.SeqToCFG where
+module RandC.Compiler.ImpToCFG where
 
 import RandC.Options
 import RandC.G
 import RandC.Pass
-import qualified RandC.Seq as Src
+import qualified RandC.Imp as Src
 import qualified RandC.CFG as Tgt
 
 import qualified Data.Map as M
@@ -23,19 +23,22 @@ newBlock block = do
   return maxId
 
 compileCom :: Src.Com -> G Tgt.Id -> S (G Tgt.Id)
-compileCom Src.Skip next =
+compileCom (Src.Com is) id = compileInstrs is id
+
+compileInstrs :: [Src.Instr] -> G Tgt.Id -> S (G Tgt.Id)
+compileInstrs [] next =
   return next
-compileCom (Src.Assn assn c) next = do
-  cNext <- compileCom c next
+compileInstrs (Src.Assn assn : is) next = do
+  cNext <- compileInstrs is next
   id <- newBlock (Tgt.Block (return assn) cNext)
   return $ return id
-compileCom (Src.If e cThen cElse cMerge) next = do
-  cMergeNext <- compileCom cMerge next
+compileInstrs (Src.If e cThen cElse : is) next = do
+  cMergeNext <- compileInstrs is next
   cThenNext  <- compileCom cThen  cMergeNext
   cElseNext  <- compileCom cElse  cMergeNext
   return (If e cThenNext cElseNext)
-compileCom (Src.Choice v es c) next = do
-  cNext <- compileCom c next
+compileInstrs (Src.Choice v es : is) next = do
+  cNext <- compileInstrs is next
   id <- newBlock (Tgt.Block (M.singleton v <$> es) cNext)
   return $ return id
 
