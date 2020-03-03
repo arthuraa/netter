@@ -59,6 +59,7 @@ library
     RandC.Compiler.UPAToPrism
     RandC.Compiler.ImpToCFG
     RandC.Compiler.CFGToUPA
+    RandC.Compiler.Optimize
     RandC.CFG
     RandC.UPA
     RandC.Compiler

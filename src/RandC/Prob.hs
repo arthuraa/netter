@@ -60,7 +60,7 @@ resolve v x = go x
         go (Choice d xs) = go $ xs !! v d
 
 data P a = P { runP :: [(Double, a)] }
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Traversable, Foldable)
 
 instance Applicative P where
   pure x = P [(1.0, x)]
