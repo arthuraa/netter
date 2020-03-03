@@ -10,7 +10,7 @@ import qualified Data.Map as M
 
 type Id = Int
 
-data Block = Block { bAssn :: P (M.Map Var Expr)
+data Block = Block { bAssn :: M.Map Var (P Expr)
                    , bNext :: G Id }
   deriving (Eq, Show)
 

@@ -4,7 +4,6 @@ module RandC.Options where
 import System.Console.CmdArgs.Implicit
 
 data Target = Imp
-            | Seq
             | CFG
             | UPA
             | Prism

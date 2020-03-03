@@ -30,17 +30,13 @@ compileInstrs [] next =
   return next
 compileInstrs (Src.Assn assn : is) next = do
   cNext <- compileInstrs is next
-  id <- newBlock (Tgt.Block (return assn) cNext)
+  id <- newBlock (Tgt.Block assn cNext)
   return $ return id
 compileInstrs (Src.If e cThen cElse : is) next = do
   cMergeNext <- compileInstrs is next
   cThenNext  <- compileCom cThen  cMergeNext
   cElseNext  <- compileCom cElse  cMergeNext
   return (If e cThenNext cElseNext)
-compileInstrs (Src.Choice v es : is) next = do
-  cNext <- compileInstrs is next
-  id <- newBlock (Tgt.Block (M.singleton v <$> es) cNext)
-  return $ return id
 
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
@@ -48,6 +44,6 @@ compile prog = do
   let initialState = (1, M.empty) -- We skip 0 since it will be the entry point of the program
   let res = compileCom com (return 0)
   let (next, (maxId, blocks)) = runState res initialState
-  let initialBlock = Tgt.Block (return M.empty) next
+  let initialBlock = Tgt.Block M.empty next
   let blocks' = M.insert 0 initialBlock blocks
   return $ Tgt.Program decls maxId blocks'

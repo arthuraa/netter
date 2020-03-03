@@ -12,9 +12,8 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pCom :: Com }
   deriving (Show, Eq)
 
-data Instr = Assn (M.Map Var Expr)
+data Instr = Assn (M.Map Var (P Expr))
            | If Expr Com Com
-           | Choice Var (P Expr)
   deriving (Eq, Show)
 
 newtype Com = Com { instrs :: [Instr] }
@@ -39,7 +38,6 @@ instance Pretty Instr where
          , pretty "else"
          , indent 2 (pretty c2)
          , pretty "fi" ]
-  pretty (Choice v es) = sep [ pretty v, pretty ".<-$", pretty es ]
 
 instance Pretty Com where
   pretty (Com is) = vcat [ pretty i <> pretty ";" | i <- is ]

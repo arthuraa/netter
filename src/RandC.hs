@@ -49,7 +49,7 @@ infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
 PE.Var v .<- rhs = do
   S decls coms <- get
-  put $ S decls (Imp.Com [Imp.Assn (M.singleton v rhs)] : coms)
+  put $ S decls (Imp.Com [Imp.Assn (M.singleton v (return rhs))] : coms)
 
 e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
@@ -65,7 +65,7 @@ infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
 PE.Var v .<-$ rhs = do
   S decls coms <- get
-  put $ S decls (Imp.Com [Imp.Choice v (P rhs)] : coms)
+  put $ S decls (Imp.Com [Imp.Assn (M.singleton v (P rhs))] : coms)
 
 e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
