@@ -1,8 +1,6 @@
 module RandC.Compiler.UPAToPrism where
 
 import RandC.Pass
-import RandC.Prism.Expr
-
 import qualified RandC.UPA   as Src
 import qualified RandC.Prism as Tgt
 
@@ -19,10 +17,8 @@ compileModule (id, Src.Module decls trans) =
       trans' = [Tgt.Transition guard (compileAssn <$> assns)
                |(guard, assns) <- trans]
 
-      -- Default case: no modifications
-      def = foldl (BinOp And) (Const (Bool True)) [UnOp Not $ fst t | t <- trans] in
-
-    Tgt.Module id decls' (trans' ++ [Tgt.Transition def $ return $ Tgt.Assns []])
+  in
+    Tgt.Module id decls' trans'
 
 compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program defs mods) =

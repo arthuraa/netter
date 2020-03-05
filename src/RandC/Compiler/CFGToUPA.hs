@@ -10,7 +10,8 @@ import RandC.Prism.Expr as PE
 import qualified RandC.CFG as Src
 import qualified RandC.UPA as Tgt
 
-import qualified Data.Map as M
+import qualified Data.Set        as S
+import qualified Data.Map.Strict as M
 
 compileNextPc :: G Src.Id -> Expr
 compileNextPc (G.Return id) = Const $ Num id
@@ -25,18 +26,38 @@ updateAssn assns id block =
           let vAssns = M.findWithDefault M.empty v assns in
             M.insert v (M.insert id e vAssns) assns
 
+
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
+
   Src.Program decls defs maxId blocks <- ensureTarget UPA prog
+
   pc <- fresh "pc"
-  let assns = M.foldlWithKey updateAssn M.empty blocks
+
+  let decls'  = M.insert pc (0, maxId - 1) decls
+
+  let pcAssns = M.fromList [ (n, return $ compileNextPc nextPc)
+                           | (n, Src.Block _ nextPc) <- M.assocs blocks ]
+
+  let assnMap = M.foldlWithKey updateAssn (M.singleton pc pcAssns) blocks
+
   let checkPc n = BinOp Eq (Var pc) (Const (Num n))
-  let varActions v = [ (checkPc n, fmap (Tgt.Assn . M.singleton v) e)
-                     | (n, e) <- M.assocs $ M.findWithDefault M.empty v assns ]
-  let varModules = [ Tgt.Module (M.singleton v (lb, ub)) (varActions v)
-                   | (v, (lb, ub)) <- M.assocs decls ]
-  let pcAssn nextPc = M.singleton pc (PE.simplify $ compileNextPc nextPc)
-  let pcActions = [ (checkPc n, return $ Tgt.Assn $ pcAssn nextPc)
-                  | (n, Src.Block _ nextPc) <- M.assocs blocks ]
-  let pcModule = Tgt.Module (M.singleton pc (0, maxId - 1)) pcActions
-  return $ Tgt.Program defs (pcModule : varModules)
+
+  let allPCs  = S.fromList [0 .. maxId - 1]
+
+  let actions v =
+        let assns        = M.findWithDefault M.empty v assnMap
+            constantPCs  = S.difference allPCs $ M.keysSet assns
+            defaultGuard =
+              if constantPCs == S.empty then []
+              else
+                [foldl (BinOp And) (Const $ Bool True)
+                 [UnOp Not $ checkPc n | n <- M.keys assns]] in
+          [ (guard, return $ Tgt.Assn M.empty) | guard <- defaultGuard ] ++
+          [ (checkPc n, fmap (Tgt.Assn . M.singleton v) e)
+          | (n, e) <- M.assocs assns ]
+
+  let modules = [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
+                | (v, (lb, ub)) <- M.assocs decls' ]
+
+  return $ Tgt.Program defs modules
