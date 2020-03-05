@@ -31,8 +31,9 @@ revSeq cs = foldl cat skip $ reverse cs
 
 instance Pretty Instr where
   pretty (Assn assns) =
-    vcat [ sep [ pretty v, pretty ".<-", pretty e ]
-         | (v, e) <- M.assocs assns ]
+    vcat [ pretty "assn"
+         , vcat [ sep [ pretty v, pretty ".<-", pretty e ]
+                | (v, e) <- M.assocs assns ] ]
   pretty (If e c1 c2) =
     vcat [ sep [ pretty "if", pretty e, pretty "then" ]
          , indent 2 (pretty c1)
