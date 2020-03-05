@@ -77,6 +77,27 @@ eval (Program decls defs com) = do
             else is ++ [Assn $ M.map return es']
   return $ Program decls defs $ Com $ is'
 
+mergeAssnsCom :: Com -> Com
+mergeAssnsCom (Com is) = Com $ mergeAssnsInstrs is
+
+mergeAssnsInstrs :: [Instr] -> [Instr]
+mergeAssnsInstrs [] = []
+mergeAssnsInstrs (i : is) =
+  case (mergeAssnsInstr i, mergeAssnsInstrs is) of
+    (i@(Assn assn), is@(Assn assn' : is')) ->
+      if S.disjoint (M.keysSet assn) (assnDeps assn') then
+        Assn (M.unionWith (\_ e -> e) assn assn') : is'
+      else i : is
+    (i, is) -> i : is
+
+mergeAssnsInstr :: Instr -> Instr
+mergeAssnsInstr i@(Assn _) = i
+mergeAssnsInstr (If e cThen cElse) = If e (mergeAssnsCom cThen) (mergeAssnsCom cElse)
+
+mergeAssns :: Program -> Program
+mergeAssns (Program decls defs com) =
+  Program decls defs (mergeAssnsCom com)
+
 simplify :: Program -> Program
 simplify (Program decls defs com) =
   Program decls (M.map PE.simplify defs) (simplifyCom com)
