@@ -105,6 +105,8 @@ instance Pretty Const where
 instance Pretty Expr where
   pretty (Var v) = pretty v
   pretty (Const k) = pretty k
+  pretty (UnOp Not (BinOp Eq e1 e2)) =
+    parens $ cat [pretty e1, pretty "!=", pretty e2]
   pretty (UnOp o e) = cat [pretty o, pretty e]
   pretty (BinOp o e1 e2) =
     let op = pretty o
