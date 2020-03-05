@@ -18,67 +18,62 @@ assnDeps assn =
   where addVarDeps allDeps es = foldl addExprDeps allDeps es
         addExprDeps allDeps e = S.union allDeps (vars e)
 
-type St a = StateT (M.Map Var Expr, M.Map Var Var) Pass a
+type Ev a = StateT (M.Map Var Expr) Pass a
 
-localize :: Var -> Expr -> St ()
-localize v e = do
-  (locals, renamings) <- get
-  v' <- fresh $ name v
-  put (M.insert v' e locals, M.insert v v' renamings)
-
-resolve :: Expr -> St Expr
-resolve = substM $ \v -> do
-  (_, renamings) <- get
-  return $ Var $ M.findWithDefault v v renamings
-
-restore :: St a -> St (a, M.Map Var Var)
-restore f = do
-  (_, renamings) <- get
+locally :: Ev a -> Ev (a, M.Map Var Expr)
+locally f = do
+  es <- get
+  put M.empty
   res <- f
-  (locals, renamings') <- get
-  put (locals, renamings)
-  return (res, renamings')
+  es' <- get
+  put es
+  return (res, es')
 
-extractLocalsCom :: Com -> St Com
-extractLocalsCom c = Com <$> extractLocalsInstrs (instrs c)
+evalExpr :: Expr -> Ev Expr
+evalExpr = substM $ \v -> do
+  es <- get
+  return $ M.findWithDefault (Var v) v es
 
-extractLocalsInstrs :: [Instr] -> St [Instr]
-extractLocalsInstrs [] =
+evalCom :: Com -> Ev Com
+evalCom c = Com <$> evalInstrs (instrs c)
+
+evalInstrs :: [Instr] -> Ev [Instr]
+evalInstrs [] =
   return []
-extractLocalsInstrs (i : is) = do
-  i  <- extractLocalsInstr  i
-  is <- extractLocalsInstrs is
+evalInstrs (i : is) = do
+  i  <- evalInstr  i
+  is <- evalInstrs is
   case i of
     Assn assns | assns == M.empty -> return is
     _ -> return $ i : is
 
-extractLocalsInstr :: Instr -> St Instr
-extractLocalsInstr (Assn assns) = do
-  assns <- mapM (traverse resolve) assns
+evalInstr :: Instr -> Ev Instr
+evalInstr (Assn assns) = do
+  assns <- mapM (traverse evalExpr) assns
   let detAssns  = M.mapMaybe ofP assns
   let probAssns = M.filter (isNothing . ofP) assns
-  _ <- M.traverseWithKey localize detAssns
+  modify (M.unionWith (\assn _ -> assn) detAssns)
   return $ Assn probAssns
 
-extractLocalsInstr (If e cThen cElse) = do
-  e <- resolve e
-  (cThen, vsThen) <- restore $ extractLocalsCom cThen
-  (cElse, vsElse) <- restore $ extractLocalsCom cElse
+evalInstr (If e cThen cElse) = do
+  e <- evalExpr e
+  (cThen, esThen) <- locally $ evalCom cThen
+  (cElse, esElse) <- locally $ evalCom cElse
 
-  forM_ (S.toList $ S.union (M.keysSet vsThen) (M.keysSet vsElse)) $ \v -> do
-    let vThen = M.findWithDefault v v vsThen
-    let vElse = M.findWithDefault v v vsElse
-    unless (vThen == v && vElse == v) $
-      localize v $ PE.If e (Var vThen) (Var vElse)
+  forM_ (S.toList $ S.union (M.keysSet esThen) (M.keysSet esElse)) $ \v -> do
+    let eThen = M.findWithDefault (Var v) v esThen
+    let eElse = M.findWithDefault (Var v) v esElse
+    unless (eThen == Var v && eElse == Var v) $
+      modify $ M.insert v $ PE.If e eThen eElse
 
   return $ If e cThen cElse
 
 extractLocals :: Program -> Pass Program
 extractLocals (Program decls defs com) = do
-  (Com is, (defs', vars')) <- runStateT (extractLocalsCom com) (defs, M.empty)
-  let is' = if vars' == M.empty then is
-            else is ++ [Assn $ M.map (return . Var) vars']
-  return $ Program decls defs' $ Com $ is'
+  (Com is, es') <- runStateT (evalCom com) M.empty
+  let is' = if es' == M.empty then is
+            else is ++ [Assn $ M.map return es']
+  return $ Program decls defs $ Com $ is'
 
 optimize :: Program -> Pass Program
 optimize prog = extractLocals prog
