@@ -62,6 +62,10 @@ resolve v x = go x
 data P a = P { runP :: [(Double, a)] }
   deriving (Show, Eq, Functor, Traversable, Foldable)
 
+ofP :: P a -> Maybe a
+ofP (P [(_, x)]) = Just x
+ofP _            = Nothing
+
 instance Applicative P where
   pure x = P [(1.0, x)]
 

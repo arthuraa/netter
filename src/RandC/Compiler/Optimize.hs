@@ -2,12 +2,15 @@ module RandC.Compiler.Optimize where
 
 import RandC.Var
 import RandC.Imp
-import RandC.Prob
+import RandC.Prob       hiding (resolve)
 import RandC.Pass
+import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If)
 
-import qualified Data.Set as S
-import qualified Data.Map as M
+import Control.Monad.State
+import Data.Maybe (isNothing)
+import qualified Data.Set        as S
+import qualified Data.Map.Strict as M
 
 assnDeps :: M.Map Var (P Expr) -> S.Set Var
 assnDeps assn =
@@ -15,23 +18,67 @@ assnDeps assn =
   where addVarDeps allDeps es = foldl addExprDeps allDeps es
         addExprDeps allDeps e = S.union allDeps (vars e)
 
-mergeAssnsCom :: Com -> Com
-mergeAssnsCom c = Com $ mergeAssnsInstrs $ instrs c
+type St a = StateT (M.Map Var Expr, M.Map Var Var) Pass a
 
-mergeAssnsInstrs :: [Instr] -> [Instr]
-mergeAssnsInstrs [] = []
-mergeAssnsInstrs (If e c1 c2 : is) =
-  If e (mergeAssnsCom c1) (mergeAssnsCom c2) : mergeAssnsInstrs is
-mergeAssnsInstrs (i@(Assn assns) : is) =
-  case mergeAssnsInstrs is of
-    i'@(Assn assns') : is' ->
-      if S.disjoint (M.keysSet assns) (assnDeps assns') then
-        Assn (M.unionWith (\_ es -> es) assns assns') : is'
-      else i : i' : is
-    is' -> i : is'
+localize :: Var -> Expr -> St ()
+localize v e = do
+  (locals, renamings) <- get
+  v' <- fresh $ name v
+  put (M.insert v' e locals, M.insert v v' renamings)
 
-mergeAssns :: Program -> Program
-mergeAssns (Program decls defs com) = Program decls defs (mergeAssnsCom com)
+resolve :: Expr -> St Expr
+resolve = substM $ \v -> do
+  (_, renamings) <- get
+  return $ Var $ M.findWithDefault v v renamings
+
+restore :: St a -> St (a, M.Map Var Var)
+restore f = do
+  (_, renamings) <- get
+  res <- f
+  (locals, renamings') <- get
+  put (locals, renamings)
+  return (res, renamings')
+
+extractLocalsCom :: Com -> St Com
+extractLocalsCom c = Com <$> extractLocalsInstrs (instrs c)
+
+extractLocalsInstrs :: [Instr] -> St [Instr]
+extractLocalsInstrs [] =
+  return []
+extractLocalsInstrs (i : is) = do
+  i  <- extractLocalsInstr  i
+  is <- extractLocalsInstrs is
+  case i of
+    Assn assns | assns == M.empty -> return is
+    _ -> return $ i : is
+
+extractLocalsInstr :: Instr -> St Instr
+extractLocalsInstr (Assn assns) = do
+  assns <- mapM (traverse resolve) assns
+  let detAssns  = M.mapMaybe ofP assns
+  let probAssns = M.filter (isNothing . ofP) assns
+  _ <- M.traverseWithKey localize detAssns
+  return $ Assn probAssns
+
+extractLocalsInstr (If e cThen cElse) = do
+  e <- resolve e
+  (cThen, vsThen) <- restore $ extractLocalsCom cThen
+  (cElse, vsElse) <- restore $ extractLocalsCom cElse
+
+  forM_ (S.toList $ S.union (M.keysSet vsThen) (M.keysSet vsElse)) $ \v -> do
+    let vThen = M.findWithDefault v v vsThen
+    let vElse = M.findWithDefault v v vsElse
+    unless (vThen == v && vElse == v) $
+      localize v $ PE.If e (Var vThen) (Var vElse)
+
+  return $ If e cThen cElse
+
+extractLocals :: Program -> Pass Program
+extractLocals (Program decls defs com) = do
+  (Com is, (defs', vars')) <- runStateT (extractLocalsCom com) (defs, M.empty)
+  let is' = if vars' == M.empty then is
+            else is ++ [Assn $ M.map (return . Var) vars']
+  return $ Program decls defs' $ Com $ is'
 
 optimize :: Program -> Pass Program
-optimize prog = return $ mergeAssns prog
+optimize prog = extractLocals prog
