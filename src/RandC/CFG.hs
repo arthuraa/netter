@@ -15,6 +15,7 @@ data Block = Block { bAssn :: M.Map Var (P Expr)
   deriving (Eq, Show)
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
+                       , pDefs     :: M.Map Var Expr
                        , pMaxBlock :: Id
                        , pBlocks   :: M.Map Id Block }
   deriving (Eq, Show)

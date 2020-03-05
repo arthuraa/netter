@@ -9,6 +9,7 @@ import Data.Text.Prettyprint.Doc hiding (cat)
 import qualified Data.Map.Strict as M
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
+                       , pDefs :: M.Map Var Expr
                        , pCom :: Com }
   deriving (Show, Eq)
 
@@ -43,7 +44,9 @@ instance Pretty Com where
   pretty (Com is) = vcat [ pretty i <> pretty ";" | i <- is ]
 
 instance Pretty Program where
-  pretty (Program decls com) =
+  pretty (Program decls defs com) =
     vcat [ vcat [ sep [ pretty v, interval lb ub ]
                 | (v, (lb, ub)) <- M.assocs decls ]
+         , vcat [ sep [ pretty "def", pretty v, pretty "=", pretty e, pretty ";" ]
+                | (v, e) <- M.assocs defs ]
          , pretty com ]

@@ -27,7 +27,7 @@ updateAssn assns id block =
 
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
-  Src.Program decls maxId blocks <- ensureTarget UPA prog
+  Src.Program decls defs maxId blocks <- ensureTarget UPA prog
   pc <- fresh "pc"
   let assns = M.foldlWithKey updateAssn M.empty blocks
   let checkPc n = BinOp Eq (Var pc) (Const (Num n))
@@ -39,4 +39,4 @@ compile prog = do
   let pcActions = [ (checkPc n, return $ Tgt.Assn $ pcAssn nextPc)
                   | (n, Src.Block _ nextPc) <- M.assocs blocks ]
   let pcModule = Tgt.Module (M.singleton pc (0, maxId - 1)) pcActions
-  return $ Tgt.Program M.empty (pcModule : varModules)
+  return $ Tgt.Program defs (pcModule : varModules)

@@ -31,7 +31,7 @@ mergeAssnsInstrs (i@(Assn assns) : is) =
     is' -> i : is'
 
 mergeAssns :: Program -> Program
-mergeAssns (Program decls com) = Program decls (mergeAssnsCom com)
+mergeAssns (Program decls defs com) = Program decls defs (mergeAssnsCom com)
 
 optimize :: Program -> Pass Program
 optimize prog = return $ mergeAssns prog

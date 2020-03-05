@@ -148,7 +148,7 @@ infix 4 .<
 compileWith :: Options -> Comp () -> IO ()
 compileWith opts prog = runPass opts $ do
   ((), S decls coms) <- runStateT prog $ S M.empty []
-  Compiler.compile (Imp.Program decls (Imp.revSeq coms))
+  Compiler.compile (Imp.Program decls M.empty (Imp.revSeq coms))
 
 compile :: Comp () -> IO ()
 compile prog = do
