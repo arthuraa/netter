@@ -46,8 +46,7 @@ instance Pretty Com where
 
 instance Pretty Program where
   pretty (Program decls defs com) =
-    vcat [ vcat [ sep [ pretty v, interval lb ub ]
-                | (v, (lb, ub)) <- M.assocs decls ]
+    vcat [ declarations decls
          , vcat [ sep [ pretty "def", pretty v, pretty "=", pretty e, pretty ";" ]
                 | (v, e) <- M.assocs defs ]
          , pretty com ]
