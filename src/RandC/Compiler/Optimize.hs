@@ -8,6 +8,7 @@ import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
 import qualified RandC.Options as O
 
+import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Maybe (isNothing)
@@ -121,8 +122,14 @@ simplifyInstr (Assn assns) =
 simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 
+maybeOptimize ::
+  (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program
+maybeOptimize opt f prog = do
+  opt <- reader opt
+  if opt then f prog else return prog
+
 optimize :: Program -> Pass Program
-optimize prog = do
-  evProg <- eval prog
-  doSimplify <- reader O.simplify
-  if doSimplify then return $ simplify evProg else return evProg
+optimize =
+  eval >=>
+  maybeOptimize O.merge    (return . mergeAssns) >=>
+  maybeOptimize O.simplify (return . simplify)
