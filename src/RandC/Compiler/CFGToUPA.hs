@@ -36,7 +36,7 @@ compile prog = do
 
   let decls'  = M.insert pc (0, maxId - 1) decls
 
-  let pcAssns = M.fromList [ (n, return $ compileNextPc nextPc)
+  let pcAssns = M.fromList [ (n, return $ PE.simplify $ compileNextPc nextPc)
                            | (n, Src.Block _ nextPc) <- M.assocs blocks ]
 
   let assnMap = M.foldlWithKey updateAssn (M.singleton pc pcAssns) blocks
