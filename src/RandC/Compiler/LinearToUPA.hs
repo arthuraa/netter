@@ -24,7 +24,8 @@ check v n = BinOp Eq (Var v) (Const (Num n))
 
 pcModule :: Var -> Int -> Tgt.Module
 pcModule pc maxPc =
-  let assn = M.singleton pc $ BinOp Mod (Var pc) (Const $ Num maxPc) in
+  let pcPlus1 = BinOp Plus (Var pc) (Const $ Num 1)
+      assn = M.singleton pc $ BinOp Mod pcPlus1 (Const $ Num maxPc) in
   Tgt.Module (M.singleton pc (0, maxPc - 1))
              [(Const $ Bool True, return $ Tgt.Assn assn)]
 
