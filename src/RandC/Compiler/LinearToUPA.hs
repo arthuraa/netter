@@ -53,7 +53,8 @@ compile prog = do
             (guards, e) <- assns,
             let guard = conj (check pc n : guards) ]
 
-  let modules = [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
+  let modules = pcModule pc maxPc :
+                [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
                 | (v, (lb, ub)) <- M.assocs decls ]
 
   return $ Tgt.Program defs modules
