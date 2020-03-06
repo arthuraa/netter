@@ -4,6 +4,7 @@ import RandC.Var
 import RandC.Prism.Expr
 import RandC.Prob
 import RandC.G
+import RandC.Formatting
 
 import qualified Data.Map.Strict as M
 import Data.Text.Prettyprint.Doc
@@ -16,4 +17,15 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
   deriving (Eq, Show)
 
 instance Pretty Program where
-  pretty = viaShow
+  pretty (Program decls defs blocks) =
+    vcat [ pretty "vars"
+         , declarations decls
+         , pretty "defs"
+         , vcat [ pretty v <+> pretty "=" <+> pretty e
+                | (v, e) <- M.assocs defs ]
+         , pretty "blocks"
+         , line
+         , vcat [ vcat [ pretty "block"
+                       , vcat [ pretty v <+> pretty "=" <+> pretty e
+                              | (v, e) <- M.assocs block ] ]
+                | block <- blocks ] ]
