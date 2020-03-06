@@ -57,10 +57,10 @@ library
     RandC.Formatting
     RandC.Prism
     RandC.Compiler.UPAToPrism
-    RandC.Compiler.ImpToCFG
-    RandC.Compiler.CFGToUPA
+    RandC.Compiler.Linearize
+    RandC.Compiler.LinearToUPA
     RandC.Compiler.Optimize
-    RandC.CFG
+    RandC.Linear
     RandC.UPA
     RandC.Compiler
     RandC.Prob
