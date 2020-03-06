@@ -4,6 +4,7 @@ import RandC.Var
 import RandC.Prob
 import RandC.Linear
 import RandC.G
+import qualified RandC.G as G
 import RandC.Prism.Expr
 import qualified RandC.Options as O
 import RandC.Pass
@@ -41,7 +42,12 @@ probExprDep :: Deps -> P Expr -> S.Set Var
 probExprDep deps e = S.unions $ fmap (exprDep deps) e
 
 guardedExprDep :: Deps -> G (P Expr) -> S.Set Var
-guardedExprDep deps e = S.unions $ fmap (probExprDep deps) e
+guardedExprDep deps (G.Return e) =
+  probExprDep deps e
+guardedExprDep deps (G.If e eThen eElse) =
+  S.unions [ exprDep deps e
+           , guardedExprDep deps eThen
+           , guardedExprDep deps eElse ]
 
 mergeBlocks :: Deps -> [Block] -> [Block]
 mergeBlocks deps blocks = go blocks
