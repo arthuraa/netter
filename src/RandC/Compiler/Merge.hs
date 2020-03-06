@@ -65,7 +65,7 @@ mergeBlocks deps blocks = go blocks
                    S.disjoint blockVars' blockDeps  &&
                    S.disjoint blockVars  blockVars' then
                   M.union block block' : blocks'
-                else block : blocks
+                else block : block' : blocks'
 
 merge :: Program -> Pass Program
 merge prog@(Program decl defs blocks) = do
