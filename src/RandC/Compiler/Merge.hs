@@ -59,10 +59,8 @@ mergeBlocks deps blocks = go blocks
             block' : blocks' ->
               let blockVars  = M.keysSet block
                   blockVars' = M.keysSet block'
-                  blockDeps  = S.unions $ fmap (guardedExprDep deps) block
                   blockDeps' = S.unions $ fmap (guardedExprDep deps) block' in
                 if S.disjoint blockVars  blockDeps' &&
-                   S.disjoint blockVars' blockDeps  &&
                    S.disjoint blockVars  blockVars' then
                   M.union block block' : blocks'
                 else block : block' : blocks'
