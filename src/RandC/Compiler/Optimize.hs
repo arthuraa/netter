@@ -31,9 +31,11 @@ simplifyInstrs (i : is) =
   case (simplifyInstr i, simplifyInstrs is) of
     (i'@(Assn assn), is') ->
       if assn == M.empty then is' else i' : is'
-    (i'@(If _ cThen cElse), is') ->
+    (i'@(If e cThen cElse), is') ->
       if cThen == cElse then instrs cThen ++ is'
-      else i' : is'
+      else case e of
+        Const (Bool b) -> instrs (if b then cThen else cElse) ++ is'
+        _ -> i' : is'
 
 simplifyInstr :: Instr -> Instr
 simplifyInstr (Assn assns) =
