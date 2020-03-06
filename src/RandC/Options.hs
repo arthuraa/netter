@@ -15,11 +15,15 @@ data Options = Options { target   :: Target
                        , simplify :: Bool }
   deriving (Ord, Eq, Show, Data, Typeable)
 
+defaultOptions :: Options
+defaultOptions =
+  Options { target   = Prism &= help "Output format"
+          , inlining = True  &= help "Perform inlining"
+          , merge    = True  &= help "Perform assignments in parallel when possible"
+          , simplify = True  &= help "Perform simplifications" }
+
 readOptions :: IO Options
 readOptions =
-  cmdArgs $ Options { target   = Prism &= help "Output format"
-                    , inlining = True  &= help "Perform inlining"
-                    , merge    = True  &= help "Perform assignments in parallel when possible"
-                    , simplify = True  &= help "Perform simplifications" }
+  cmdArgs $ defaultOptions
           &= program "randc"
           &= summary "randc v0.1"

@@ -146,7 +146,7 @@ infix 4 .<
 (.<) = PE.BinOp PE.Lt
 
 compileWith :: Options -> Comp () -> IO ()
-compileWith opts prog = runPass opts $ do
+compileWith opts prog = doPass opts $ do
   ((), S decls coms) <- runStateT prog $ S M.empty []
   Compiler.compile (Imp.Program decls M.empty (Imp.revSeq coms))
 

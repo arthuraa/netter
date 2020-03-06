@@ -10,7 +10,7 @@ import Control.Monad.Except
 
 data Result = Done String
             | Error String
-  deriving (Ord, Eq)
+  deriving (Ord, Eq, Show)
 
 newtype Pass a =
   Pass (ExceptT Result (ReaderT Options (VarGenT Identity)) a)
@@ -24,10 +24,13 @@ ensureTarget curTgt res = do
   if curTgt <= endTgt then return res
     else throwError . Done . show . pretty $ res
 
-runPass :: Pretty a => Options -> Pass a -> IO ()
+runPass :: Options -> Pass a -> Either Result a
 runPass opts (Pass f) =
-  let r = fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars in
-    case r of
-      Left  (Error e) -> putStrLn $ "Error: " ++ e
-      Left  (Done  r) -> putStrLn r
-      Right r -> putStrLn $ show $ pretty r
+  fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars
+
+doPass :: Pretty a => Options -> Pass a -> IO ()
+doPass opts pass =
+  case runPass opts pass of
+    Left  (Error e) -> putStrLn $ "Error: " ++ e
+    Left  (Done  r) -> putStrLn r
+    Right r -> putStrLn $ show $ pretty r
