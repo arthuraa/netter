@@ -60,6 +60,7 @@ library
     RandC.Compiler.Linearize
     RandC.Compiler.LinearToUPA
     RandC.Compiler.Optimize
+    RandC.Compiler.Merge
     RandC.Linear
     RandC.UPA
     RandC.Compiler
