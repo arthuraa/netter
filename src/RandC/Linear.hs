@@ -3,13 +3,12 @@ module RandC.Linear where
 import RandC.Var
 import RandC.Prism.Expr
 import RandC.Prob
+import RandC.G
 
 import qualified Data.Map.Strict as M
 import Data.Text.Prettyprint.Doc
 
--- A guarded probabilistic expression
-type GPExpr = ([Expr], P Expr)
-type Block = M.Map Var [GPExpr]
+type Block = M.Map Var (G (P Expr))
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pDefs :: M.Map Var Expr

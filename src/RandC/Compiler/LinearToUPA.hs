@@ -5,13 +5,15 @@ import RandC.Var
 import RandC.Options
 import RandC.Pass
 import RandC.Prism.Expr as PE
+import RandC.G
+import RandC.Prob
 import qualified RandC.Linear as Src
 import qualified RandC.UPA    as Tgt
 
 import qualified Data.Set        as S
 import qualified Data.Map.Strict as M
 
-type Assn = M.Map Var (M.Map Int [Src.GPExpr])
+type Assn = M.Map Var (M.Map Int (G (P Expr)))
 
 addBlock :: Assn -> (Int, Src.Block) -> Assn
 addBlock assn (pc, block) =
@@ -46,10 +48,9 @@ compile prog = do
               if constantPCs == S.empty then []
               else [conj [UnOp Not $ check pc n | n <- M.keys assns]] in
           [ (guard, return $ Tgt.Assn M.empty) | guard <- defaultGuard ] ++
-          [ (guard, fmap (Tgt.Assn . M.singleton v) e)
+          [ (BinOp And (check pc n) guard, fmap (Tgt.Assn . M.singleton v) e)
           | (n, assns) <- M.assocs assns,
-            (guards, e) <- assns,
-            let guard = conj (check pc n : guards) ]
+            (guard, e) <- flatten assns ]
 
   let modules = pcModule pc maxPc :
                 [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
