@@ -4,7 +4,8 @@
 module RandC.G where
 
 import Data.Text.Prettyprint.Doc
-import RandC.Prism.Expr hiding (If)
+import RandC.Prism.Expr hiding (If, simplify)
+import qualified RandC.Prism.Expr as PE
 
 data G a = Return a
          | If Expr (G a) (G a)
@@ -25,6 +26,17 @@ instance Pretty a => Pretty (G a) where
     pretty x
   pretty (If e x y) =
     sep [ pretty e, pretty "?", parens (pretty x), pretty ":", parens (pretty y) ]
+
+simplify :: Eq a => G a -> G a
+simplify (Return x) = Return x
+simplify (If e x y) =
+  let e' = PE.simplify e
+      x' = simplify x
+      y' = simplify y in
+    if x' == y' then x'
+    else case e' of
+           Const (Bool b) -> if b then x' else y'
+           _ -> If e' x' y'
 
 flatten :: G a -> [(Expr, a)]
 flatten x = go [] x

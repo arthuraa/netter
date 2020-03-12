@@ -4,7 +4,7 @@ import RandC.Var
 import RandC.Imp
 import RandC.Prob       hiding (resolve)
 import qualified RandC.G as G
-import RandC.G          hiding (If)
+import RandC.G          hiding (If, simplify)
 import RandC.Pass
 import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
@@ -117,7 +117,7 @@ simplifyInstrs (i : is) =
 
 simplifyInstr :: Instr -> Instr
 simplifyInstr (Assn assns) =
-  Assn (M.map (fmap $ fmap PE.simplify) assns)
+  Assn (M.map (G.simplify . fmap (fmap PE.simplify)) assns)
 simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 
