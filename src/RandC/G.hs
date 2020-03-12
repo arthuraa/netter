@@ -38,7 +38,7 @@ simplify (If e x y) =
            Const (Bool b) -> if b then x' else y'
            _ -> If e' x' y'
 
-flatten :: G a -> [(Expr, a)]
+flatten :: G a -> [([Expr], a)]
 flatten x = go [] x
-  where go guards (Return x) = [(conj guards, x)]
+  where go guards (Return x) = [(guards, x)]
         go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y

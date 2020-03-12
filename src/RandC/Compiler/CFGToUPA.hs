@@ -52,7 +52,7 @@ compile prog = do
               if constantPCs == S.empty then []
               else [conj [UnOp Not $ checkPc n | n <- M.keys assns]] in
           [ (guard, return $ Tgt.Assn M.empty) | guard <- defaultGuard ] ++
-          [ (BinOp And (checkPc n) guard, fmap (Tgt.Assn . M.singleton v) e)
+          [ (conj (checkPc n : guard), fmap (Tgt.Assn . M.singleton v) e)
           | (n, ge) <- M.assocs assns, (guard, e) <- flatten ge ]
 
   let modules = [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
