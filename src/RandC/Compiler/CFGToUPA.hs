@@ -50,9 +50,7 @@ compile prog = do
             constantPCs  = S.difference allPCs $ M.keysSet assns
             defaultGuard =
               if constantPCs == S.empty then []
-              else
-                [foldl (BinOp And) (Const $ Bool True)
-                 [UnOp Not $ checkPc n | n <- M.keys assns]] in
+              else [conj [UnOp Not $ checkPc n | n <- M.keys assns]] in
           [ (guard, return $ Tgt.Assn M.empty) | guard <- defaultGuard ] ++
           [ (checkPc n, fmap (Tgt.Assn . M.singleton v) e)
           | (n, e) <- M.assocs assns ]

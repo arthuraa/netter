@@ -117,6 +117,10 @@ instance Pretty Expr where
   pretty (If cond eThen eElse) =
     parens $ cat [pretty cond, pretty "?", pretty eThen, pretty ":", pretty eElse]
 
+conj :: [Expr] -> Expr
+conj []       = Const $ Bool True
+conj (e : es) = foldl (BinOp And) e es
+
 -- Overload arthimatic operators
 instance Num Expr where
   e1 + e2 = BinOp Plus e1 e2

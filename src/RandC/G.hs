@@ -2,10 +2,10 @@
 module RandC.G where
 
 import Data.Text.Prettyprint.Doc
-import qualified RandC.Prism.Expr as E
+import RandC.Prism.Expr hiding (If)
 
 data G a = Return a
-         | If E.Expr (G a) (G a)
+         | If Expr (G a) (G a)
   deriving (Show, Eq, Functor)
 
 instance Applicative G where
@@ -23,3 +23,8 @@ instance Pretty a => Pretty (G a) where
     pretty x
   pretty (If e x y) =
     sep [ pretty e, pretty "?", parens (pretty x), pretty ":", parens (pretty y) ]
+
+flatten :: G a -> [(Expr, a)]
+flatten x = go [] x
+  where go guards (Return x) = [(conj guards, x)]
+        go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y
