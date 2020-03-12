@@ -58,7 +58,7 @@ mergeInstrs deps is = go is
             (i@(Assn assn), i'@(Assn assn') : is') ->
               let assnVars  = M.keysSet assn
                   assnVars' = M.keysSet assn'
-                  assnDeps' = S.unions $ fmap (probExprDep deps) assn' in
+                  assnDeps' = S.unions $ fmap (guardedExprDep deps) assn' in
                 if S.disjoint assnVars assnDeps' &&
                    S.disjoint assnVars assnVars' then
                   Assn (M.union assn assn') : is'
@@ -93,7 +93,7 @@ simplifyInstrs (i : is) =
 
 simplifyInstr :: Instr -> Instr
 simplifyInstr (Assn assns) =
-  Assn (M.map (fmap PE.simplify) assns)
+  Assn (M.map (fmap $ fmap PE.simplify) assns)
 simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 

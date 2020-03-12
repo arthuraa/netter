@@ -3,6 +3,7 @@ module RandC.Imp where
 import RandC.Var
 import RandC.Formatting
 import RandC.Prism.Expr hiding (If)
+import RandC.G hiding (If)
 import RandC.Prob hiding (Choice)
 
 import Data.Text.Prettyprint.Doc hiding (cat)
@@ -13,7 +14,7 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pCom :: Com }
   deriving (Show, Eq)
 
-data Instr = Assn (M.Map Var (P Expr))
+data Instr = Assn (M.Map Var (G (P Expr)))
            | If Expr Com Com
   deriving (Eq, Show)
 

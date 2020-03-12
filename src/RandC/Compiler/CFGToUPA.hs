@@ -17,7 +17,7 @@ compileNextPc :: G Src.Id -> Expr
 compileNextPc (G.Return id) = Const $ Num id
 compileNextPc (G.If e e1 e2) = PE.If e (compileNextPc e1) (compileNextPc e2)
 
-type Assn = M.Map Var (M.Map Src.Id (P Expr))
+type Assn = M.Map Var (M.Map Src.Id (G (P Expr)))
 
 updateAssn :: Assn -> Src.Id -> Src.Block -> Assn
 updateAssn assns id block =
@@ -36,7 +36,7 @@ compile prog = do
 
   let decls'  = M.insert pc (0, maxId - 1) decls
 
-  let pcAssns = M.fromList [ (n, return $ PE.simplify $ compileNextPc nextPc)
+  let pcAssns = M.fromList [ (n, return $ return $ PE.simplify $ compileNextPc nextPc)
                            | (n, Src.Block _ nextPc) <- M.assocs blocks ]
 
   let assnMap = M.foldlWithKey updateAssn (M.singleton pc pcAssns) blocks
@@ -52,8 +52,8 @@ compile prog = do
               if constantPCs == S.empty then []
               else [conj [UnOp Not $ checkPc n | n <- M.keys assns]] in
           [ (guard, return $ Tgt.Assn M.empty) | guard <- defaultGuard ] ++
-          [ (checkPc n, fmap (Tgt.Assn . M.singleton v) e)
-          | (n, e) <- M.assocs assns ]
+          [ (BinOp And (checkPc n) guard, fmap (Tgt.Assn . M.singleton v) e)
+          | (n, ge) <- M.assocs assns, (guard, e) <- flatten ge ]
 
   let modules = [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
                 | (v, (lb, ub)) <- M.assocs decls' ]
