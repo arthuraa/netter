@@ -1,14 +1,12 @@
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.G where
 
 import Data.Text.Prettyprint.Doc
-import RandC.Prism.Expr hiding (If)
+import qualified RandC.Prism.Expr as E
 
 data G a = Return a
-         | If Expr (G a) (G a)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+         | If E.Expr (G a) (G a)
+  deriving (Show, Eq, Functor)
 
 instance Applicative G where
   pure = Return
@@ -25,8 +23,3 @@ instance Pretty a => Pretty (G a) where
     pretty x
   pretty (If e x y) =
     sep [ pretty e, pretty "?", parens (pretty x), pretty ":", parens (pretty y) ]
-
-flatten :: G a -> [(Expr, a)]
-flatten x = go [] x
-  where go guards (Return x) = [(conj guards, x)]
-        go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y
