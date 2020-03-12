@@ -3,6 +3,7 @@ module RandC.Compiler.Optimize where
 import RandC.Var
 import RandC.Imp
 import RandC.Prob       hiding (resolve)
+import qualified RandC.G as G
 import RandC.G          hiding (If)
 import RandC.Pass
 import qualified RandC.Prism.Expr as PE
@@ -50,11 +51,34 @@ probExprDep deps e = S.unions $ fmap (exprDep deps) e
 guardedExprDep :: Deps -> G (P Expr) -> S.Set Var
 guardedExprDep deps e = S.unions $ fmap (probExprDep deps) e
 
+mergeAssns :: Expr -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr))
+mergeAssns e assn1 assn2 =
+  let modVars       = S.union (M.keysSet assn1) (M.keysSet assn2)
+      varVal assn v = M.findWithDefault (return $ return $ Var v) v assn in
+    M.fromSet (\v -> G.If e (varVal assn1 v) (varVal assn2 v)) modVars
+
+mergeInstr :: Deps -> Instr -> Instr
+mergeInstr _ (Assn assn) =
+  Assn assn
+mergeInstr deps (If e c1 c2) =
+  let c1' = mergeCom deps c1
+      c2' = mergeCom deps c2 in
+    case (instrs c1', instrs c2') of
+      ([], []) ->
+        Assn M.empty
+      ([Assn assn1], []) ->
+        Assn (mergeAssns e assn1 M.empty)
+      ([], [Assn assn2]) ->
+        Assn (mergeAssns e M.empty assn2)
+      ([Assn assn1], [Assn assn2]) ->
+        Assn (mergeAssns e assn1 assn2)
+      (_, _) -> If e c1' c2'
+
 mergeInstrs :: Deps -> [Instr] -> [Instr]
 mergeInstrs deps is = go is
   where go [] = []
         go (i : is) =
-          case (i, go is) of
+          case (mergeInstr deps i, go is) of
             (i@(Assn assn), i'@(Assn assn') : is') ->
               let assnVars  = M.keysSet assn
                   assnVars' = M.keysSet assn'
