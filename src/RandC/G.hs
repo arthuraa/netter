@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.G where
 
@@ -6,7 +8,7 @@ import RandC.Prism.Expr hiding (If)
 
 data G a = Return a
          | If Expr (G a) (G a)
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Applicative G where
   pure = Return
