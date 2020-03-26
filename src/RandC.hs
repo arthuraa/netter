@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as M
 type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
+           , sFormulas :: M.Map Var Expr
            , sComs :: [Imp.Com] }
 
 type Comp a = StateT S Pass a
@@ -33,23 +34,39 @@ namedVar x lb ub = do
 
   v <- fresh x
 
-  S decls coms <- get
+  S decls defs coms <- get
 
   let decls' = M.insert v (lb, ub) decls
 
-  put $ S decls' coms
+  put $ S decls' defs coms
 
   return $ PE.Var v
 
 var :: Int -> Int -> Comp Expr
 var = namedVar "_"
 
+formula :: Text -> Expr -> Comp Expr
+formula x e = do
+  v <- fresh x
+
+  S decls defs coms <- get
+
+  let defs' = M.insert v e defs
+
+  put $ S decls defs' coms
+
+  return $ PE.Var v
+
 -- Assignment operator used for Var
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
 PE.Var v .<- rhs = do
-  S decls coms <- get
-  put $ S decls (Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : coms)
+  S decls defs coms <- get
+
+  when (not $ M.member v decls) $ do
+    throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
+
+  put $ S decls defs (Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : coms)
 
 e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
@@ -64,26 +81,30 @@ infix 0 .:
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
 PE.Var v .<-$ rhs = do
-  S decls coms <- get
-  put $ S decls (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : coms)
+  S decls defs coms <- get
+
+  when (not $ M.member v decls) $ do
+    throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
+
+  put $ S decls defs (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : coms)
 
 e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
 if' :: Expr -> Comp () -> Comp () -> Comp ()
 if' e cThen cElse = do
-  S decls coms <- get
+  S decls defs coms <- get
 
-  put $ S decls []
+  put $ S decls defs []
   cThen
 
-  S decls' comsThen <- get
+  S decls' defsThen comsThen <- get
 
-  put $ S decls' []
+  put $ S decls' defsThen []
   cElse
 
-  S decls'' comsElse <- get
+  S decls'' defsElse comsElse <- get
 
-  put $ S decls'' (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
+  put $ S decls'' defsElse (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
 
 switch :: [(Expr, Comp ())] -> Comp ()
 switch [] = return ()
@@ -128,7 +149,6 @@ infixl 6 .-
 (.-) :: Expr -> Expr -> Expr
 (.-) = PE.BinOp PE.Minus
 
--- Overload equal sign with @.==@
 infix 4 .==
 (.==) :: Expr -> Expr -> Expr
 e1 .== e2 = PE.BinOp PE.Eq e1 e2
@@ -147,8 +167,8 @@ infix 4 .<
 
 compileWith :: Options -> Comp () -> IO ()
 compileWith opts prog = doPass opts $ do
-  ((), S decls coms) <- runStateT prog $ S M.empty []
-  Compiler.compile (Imp.Program decls M.empty (Imp.revSeq coms))
+  ((), S decls defs coms) <- runStateT prog $ S M.empty M.empty []
+  Compiler.compile (Imp.Program decls defs (Imp.revSeq coms))
 
 compile :: Comp () -> IO ()
 compile prog = do
