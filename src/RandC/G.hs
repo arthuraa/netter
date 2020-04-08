@@ -3,7 +3,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.G where
 
+import qualified Data.Set as S
 import Data.Text.Prettyprint.Doc
+import RandC.Var
 import RandC.Prism.Expr hiding (If, simplify)
 import qualified RandC.Prism.Expr as PE
 
@@ -42,3 +44,10 @@ flatten :: G a -> [([Expr], a)]
 flatten x = go [] x
   where go guards (Return x) = [(guards, x)]
         go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y
+
+-- | Compute the vars that appear in a guarded expression, using another
+-- function aVars to find the variables that appear at the leaves.
+vars :: (a -> S.Set Var) -> G a -> S.Set Var
+vars aVars x = go x
+  where go (Return x)   = aVars x
+        go (If e x1 x2) = S.unions [PE.vars e, go x1, go x2]

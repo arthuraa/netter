@@ -14,18 +14,38 @@ import Control.Monad.Reader
 import qualified Data.Set        as S
 import qualified Data.Map.Strict as M
 
-assnDeps :: M.Map Var (P Expr) -> S.Set Var
+-- * Minimizing the control-flow graph
+
+-- | The most important optimization when converting from Imp to CFG is to
+-- collapse successive assignments, which allows us to use fewer blocks in the
+-- CFG, and thus fewer PC values in the Prism code.  Two consecutive assignments
+-- @assn1@ and @assn2@ can be merged when
+--
+--     1. the expressions in @assn2@ do not use variables assigned by @assn1@, and
+--
+--     2. @assn1@ and @assn2@ assign to disjoint sets of variables.
+--
+-- Computing the dependencies is slightly tricky because of local definitions.
+-- If an expression uses a local definition, we have to find all the state
+-- variables that this definition depends on.  Since a definition might depend
+-- on another one, we have to compute the dependecies recursively.
+
+-- | Compute all the variables that appear on the right-hand side of a parallel
+-- assignment.
+assnDeps :: M.Map Var (P Expr) -- ^ Assignment of probabistic expressions to variables.
+         -> S.Set Var          -- ^ Variables on the right-hand side.
 assnDeps assn =
   foldl addVarDeps S.empty assn
   where addVarDeps allDeps es = foldl addExprDeps allDeps es
-        addExprDeps allDeps e = S.union allDeps (vars e)
+        addExprDeps allDeps e = S.union allDeps (PE.vars e)
 
-type Deps = M.Map Var (S.Set Var)
+-- | This dependency map, computed by @definitionStateDeps@ below, maps each
+-- local definition to the set of state variables it depends on
+type StateDeps = M.Map Var (S.Set Var)
 
--- Compute the dependencies of intermediate definitions on state variables
-defDeps :: M.Map Var Expr -> Deps
-defDeps defs = foldl updateDependencies M.empty $ M.keysSet defs
-  where directDepMap = M.map vars defs
+definitionStateDeps :: M.Map Var Expr -> StateDeps
+definitionStateDeps defs = foldl updateDependencies M.empty $ M.keysSet defs
+  where directDepMap = M.map PE.vars defs
         updateDependencies deps v
           | M.member v deps =
             -- The variable v has already been visited, so we can skip it
@@ -41,23 +61,35 @@ defDeps defs = foldl updateDependencies M.empty $ M.keysSet defs
                                | v' <- S.toList directDeps ] in
               M.insert v allDeps deps'
 
-exprDep :: Deps -> Expr -> S.Set Var
-exprDep deps e = S.unions [ M.findWithDefault (S.singleton v) v deps
-                          | v <- S.toList $ vars e ]
+-- | Lookup the dependencies of a variable.  If a variable does not appear on
+-- the dependency map, it is supposed to be part of the program state instead of
+-- a local definition.  In this case, the variable depends only on itself.
+varStateDeps :: StateDeps -> Var -> S.Set Var
+varStateDeps deps v = M.findWithDefault (S.singleton v) v deps
 
-probExprDep :: Deps -> P Expr -> S.Set Var
-probExprDep deps e = S.unions $ fmap (exprDep deps) e
+exprStateDeps :: StateDeps -> Expr -> S.Set Var
+exprStateDeps deps e =
+  S.unions [varStateDeps deps v | v <- S.toList $ PE.vars e]
 
-guardedExprDep :: Deps -> G (P Expr) -> S.Set Var
-guardedExprDep deps e = S.unions $ fmap (probExprDep deps) e
+probExprStateDeps :: StateDeps -> P Expr -> S.Set Var
+probExprStateDeps deps e = S.unions $ fmap (exprStateDeps deps) e
 
-mergeAssns :: Expr -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr))
-mergeAssns e assn1 assn2 =
+guardedExprStateDeps :: StateDeps -> G (P Expr) -> S.Set Var
+guardedExprStateDeps deps e =
+  let innerStateDeps  = S.unions $ fmap (probExprStateDeps deps) e
+      branchDeps      = G.vars (const S.empty) e
+      branchStateDeps = S.unions $ S.map (varStateDeps deps) branchDeps in
+    innerStateDeps `S.union` branchStateDeps
+
+-- | When an if statement has only two blocks of assignments, one in each
+-- branch, we can combine the two branches using a conditional expression.
+condAssn :: Expr -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr)) -> M.Map Var (G (P Expr))
+condAssn e assn1 assn2 =
   let modVars       = S.union (M.keysSet assn1) (M.keysSet assn2)
       varVal assn v = M.findWithDefault (return $ return $ Var v) v assn in
     M.fromSet (\v -> G.If e (varVal assn1 v) (varVal assn2 v)) modVars
 
-mergeInstr :: Deps -> Instr -> Instr
+mergeInstr :: StateDeps -> Instr -> Instr
 mergeInstr _ (Assn assn) =
   Assn assn
 mergeInstr deps (If e c1 c2) =
@@ -67,14 +99,14 @@ mergeInstr deps (If e c1 c2) =
       ([], []) ->
         Assn M.empty
       ([Assn assn1], []) ->
-        Assn (mergeAssns e assn1 M.empty)
+        Assn (condAssn e assn1 M.empty)
       ([], [Assn assn2]) ->
-        Assn (mergeAssns e M.empty assn2)
+        Assn (condAssn e M.empty assn2)
       ([Assn assn1], [Assn assn2]) ->
-        Assn (mergeAssns e assn1 assn2)
+        Assn (condAssn e assn1 assn2)
       (_, _) -> If e c1' c2'
 
-mergeInstrs :: Deps -> [Instr] -> [Instr]
+mergeInstrs :: StateDeps -> [Instr] -> [Instr]
 mergeInstrs deps is = go is
   where go [] = []
         go (i : is) =
@@ -82,19 +114,19 @@ mergeInstrs deps is = go is
             (i@(Assn assn), i'@(Assn assn') : is') ->
               let assnVars  = M.keysSet assn
                   assnVars' = M.keysSet assn'
-                  assnDeps' = S.unions $ fmap (guardedExprDep deps) assn' in
+                  assnDeps' = S.unions $ fmap (guardedExprStateDeps deps) assn' in
                 if S.disjoint assnVars assnDeps' &&
                    S.disjoint assnVars assnVars' then
                   Assn (M.union assn assn') : is'
                 else i : i' : is'
             (i, is) -> i : is
 
-mergeCom :: Deps -> Com -> Com
+mergeCom :: StateDeps -> Com -> Com
 mergeCom deps (Com is) = Com $ mergeInstrs deps is
 
 merge :: Program -> Program
 merge (Program decl defs blocks) =
-  Program decl defs $ mergeCom (defDeps defs) blocks
+  Program decl defs $ mergeCom (definitionStateDeps defs) blocks
 
 simplify :: Program -> Program
 simplify (Program decls defs com) =

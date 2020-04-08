@@ -197,6 +197,7 @@ simplify (If e eThen eElse) = let e'     = simplify e
                                   Const (Bool False) -> eElse'
                                   _ -> If e' eThen' eElse'
 
+-- | Compute all of the variables that appear on an expression.
 vars :: Expr -> S.Set Var
 vars (Var v)            = S.singleton v
 vars (Const _)          = S.empty
