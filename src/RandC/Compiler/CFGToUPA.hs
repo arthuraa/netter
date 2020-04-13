@@ -14,7 +14,7 @@ import qualified Data.Set        as S
 import qualified Data.Map.Strict as M
 
 compileNextPc :: G Src.Id -> Expr
-compileNextPc (G.Return id) = Const $ Num id
+compileNextPc (G.Return id) = Const $ Int id
 compileNextPc (G.If e e1 e2) = PE.If e (compileNextPc e1) (compileNextPc e2)
 
 type Assn = M.Map Var (M.Map Src.Id (G (P Expr)))
@@ -41,7 +41,7 @@ compile prog = do
 
   let assnMap = M.foldlWithKey updateAssn (M.singleton pc pcAssns) blocks
 
-  let checkPc n = BinOp Eq (Var pc) (Const (Num n))
+  let checkPc n = BinOp Eq (Var pc) (Const (Int n))
 
   let allPCs  = S.fromList [0 .. maxId - 1]
 

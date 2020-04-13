@@ -21,7 +21,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text.Prettyprint.Doc
 
-data Const = Num Int | Bool Bool
+data Const = Int Int | Double Double | Bool Bool
   deriving (Show, Ord, Eq, Generic)
 
 instance Hashable Const
@@ -98,7 +98,8 @@ instance Pretty BinOp where
           go Mod   = "mod"
 
 instance Pretty Const where
-  pretty (Num n) = pretty n
+  pretty (Int n) = pretty n
+  pretty (Double x) = pretty x
   pretty (Bool True) = pretty "true"
   pretty (Bool False) = pretty "false"
 
@@ -129,7 +130,7 @@ instance Num Expr where
 
   abs _ = undefined
   signum = undefined
-  fromInteger i = Const $ Num $ fromInteger i
+  fromInteger i = Const $ Int $ fromInteger i
 
 substM :: Monad m => (Var -> m Expr) -> Expr -> m Expr
 substM s e = go e
@@ -153,20 +154,20 @@ simplify1 Not (Const (Bool b)) = Const (Bool (not b))
 simplify1 o e = UnOp o e
 
 simplify2 :: BinOp -> Expr -> Expr -> Expr
-simplify2 o e1@(Const (Num n1)) e2@(Const (Num n2)) =
-  let num  f = Const $ Num  $ f n1 n2
+simplify2 o e1@(Const (Int n1)) e2@(Const (Int n2)) =
+  let int  f = Const $ Int  $ f n1 n2
       bool f = Const $ Bool $ f n1 n2 in
   case o of
-    Plus  -> num  (+)
-    Minus -> num  (-)
-    Times -> num  (*)
-    Div   -> num  div
+    Plus  -> int  (+)
+    Minus -> int  (-)
+    Times -> int  (*)
+    Div   -> int  div
     Eq    -> bool (==)
     Leq   -> bool (<=)
     Lt    -> bool (<)
-    Max   -> num  max
-    Min   -> num  min
-    Mod   -> num  mod
+    Max   -> int  max
+    Min   -> int  min
+    Mod   -> int  mod
     _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
   let bool f = Const $ Bool $ f b1 b2 in

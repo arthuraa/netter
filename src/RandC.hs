@@ -23,8 +23,15 @@ data S = S { sVarDecls :: M.Map Var (Int, Int)
 
 type Comp a = StateT S Pass a
 
+-- TODO: Find a way of deprecating this
 num :: Int -> Expr
-num = PE.Const . PE.Num
+num = PE.Const . PE.Int
+
+int :: Int -> Expr
+int = num
+
+double :: Double -> Expr
+double = PE.Const . PE.Double
 
 namedVar :: Text -> Int -> Int -> Comp Expr
 namedVar x lb ub = do
