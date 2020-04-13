@@ -123,6 +123,15 @@ orElse = PE.Const (PE.Bool True)
 when' :: Expr -> Comp () -> Comp ()
 when' e c = if' e c (return ())
 
+ceil' :: Expr -> Expr
+ceil' = PE.UnOp PE.Ceil
+
+floor' :: Expr -> Expr
+floor' = PE.UnOp PE.Floor
+
+round' :: Expr -> Expr
+round' = PE.UnOp PE.Round
+
 max' :: Expr -> Expr -> Expr
 max' = PE.BinOp PE.Max
 
@@ -131,6 +140,9 @@ min' = PE.BinOp PE.Min
 
 mod' :: Expr -> Expr -> Expr
 mod' = PE.BinOp PE.Mod
+
+log' :: Expr -> Expr -> Expr
+log' = PE.BinOp PE.Log
 
 infixr 3 .&&
 (.&&) :: Expr -> Expr -> Expr
@@ -143,6 +155,10 @@ infixr 2 .||
 infixl 7 .*
 (.*) :: Expr -> Expr -> Expr
 (.*) = PE.BinOp PE.Times
+
+infix 8 .**
+(.**) :: Expr -> Expr -> Expr
+(.**) = PE.BinOp PE.Pow
 
 infixl 7 ./
 (./) :: Expr -> Expr -> Expr

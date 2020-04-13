@@ -26,12 +26,12 @@ data Const = Int Int | Double Double | Bool Bool
 
 instance Hashable Const
 
-data UnOp = Not
+data UnOp = Not | Floor | Ceil | Round
   deriving (Show, Ord, Eq, Generic)
 
 instance Hashable UnOp
 
-data BinOp = Plus | Minus | Times | Div | Eq | Leq | Lt | Or | And | Max | Min | Mod
+data BinOp = Plus | Minus | Times | Div | Eq | Leq | Lt | Or | And | Max | Min | Mod | Pow | Log
   deriving (Show, Ord, Eq, Generic)
 
 instance Hashable BinOp
@@ -80,7 +80,10 @@ atomic (Const _) = True
 atomic _         = False
 
 instance Pretty UnOp where
-  pretty Not = pretty "!"
+  pretty Not   = pretty "!"
+  pretty Floor = pretty "floor"
+  pretty Ceil  = pretty "ceil"
+  pretty Round = pretty "round"
 
 instance Pretty BinOp where
   pretty o = pretty $ go o
@@ -96,6 +99,8 @@ instance Pretty BinOp where
           go Max   = "max"
           go Min   = "min"
           go Mod   = "mod"
+          go Pow   = "pow"
+          go Log   = "log"
 
 instance Pretty Const where
   pretty (Int n) = pretty n
@@ -150,25 +155,42 @@ subst1 :: Var -> Expr -> Expr -> Expr
 subst1 v e e' = runIdentity $ subst1M v (return e) e'
 
 simplify1 :: UnOp -> Expr -> Expr
-simplify1 Not (Const (Bool b)) = Const (Bool (not b))
+simplify1 o e@(Const (Bool b)) =
+  case o of
+    Not -> Const (Bool (not b))
+    _   -> error $ "Expr: found ill-typed expression " ++ show (pretty (UnOp o e))
+simplify1 o e@(Const (Int _)) =
+  case o of
+    Ceil  -> e
+    Floor -> e
+    Round -> e
+    _   -> error $ "Expr: found ill-typed expression " ++ show (pretty (UnOp o e))
+simplify1 o e@(Const (Double x)) =
+  case o of
+    Ceil  -> Const $ Int $ ceiling x
+    Floor -> Const $ Int $ floor x
+    Round -> Const $ Int $ round x
+    _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (UnOp o e))
 simplify1 o e = UnOp o e
 
 simplify2 :: BinOp -> Expr -> Expr -> Expr
 simplify2 o e1@(Const (Int n1)) e2@(Const (Int n2)) =
   let int    f = Const $ Int    $ f n1 n2
-      double f = Const $ Double $ f n1 n2
+      double f = Const $ Double $ f (fromIntegral n1) (fromIntegral n2)
       bool   f = Const $ Bool   $ f n1 n2 in
   case o of
     Plus  -> int    (+)
     Minus -> int    (-)
     Times -> int    (*)
-    Div   -> double (\n1 n2 -> fromIntegral n1 / fromIntegral n2)
+    Div   -> double (/)
     Eq    -> bool   (==)
     Leq   -> bool   (<=)
     Lt    -> bool   (<)
     Max   -> int    max
     Min   -> int    min
     Mod   -> int    mod
+    Pow   -> int    (^)
+    Log   -> double logBase
     _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 o e1@(Const (Double _)) (Const (Int n2)) =
   simplify2 o e1 (Const $ Int $ fromIntegral n2)
@@ -187,6 +209,8 @@ simplify2 o e1@(Const (Double n1)) e2@(Const (Double n2)) =
     Lt    -> bool   (<)
     Max   -> double max
     Min   -> double min
+    Pow   -> double (**)
+    Log   -> double logBase
     _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
   let bool f = Const $ Bool $ f b1 b2 in
