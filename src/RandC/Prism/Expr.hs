@@ -155,19 +155,38 @@ simplify1 o e = UnOp o e
 
 simplify2 :: BinOp -> Expr -> Expr -> Expr
 simplify2 o e1@(Const (Int n1)) e2@(Const (Int n2)) =
-  let int  f = Const $ Int  $ f n1 n2
-      bool f = Const $ Bool $ f n1 n2 in
+  let int    f = Const $ Int    $ f n1 n2
+      double f = Const $ Double $ f n1 n2
+      bool   f = Const $ Bool   $ f n1 n2 in
   case o of
-    Plus  -> int  (+)
-    Minus -> int  (-)
-    Times -> int  (*)
-    Div   -> int  div
-    Eq    -> bool (==)
-    Leq   -> bool (<=)
-    Lt    -> bool (<)
-    Max   -> int  max
-    Min   -> int  min
-    Mod   -> int  mod
+    Plus  -> int    (+)
+    Minus -> int    (-)
+    Times -> int    (*)
+    Div   -> double (\n1 n2 -> fromIntegral n1 / fromIntegral n2)
+    Eq    -> bool   (==)
+    Leq   -> bool   (<=)
+    Lt    -> bool   (<)
+    Max   -> int    max
+    Min   -> int    min
+    Mod   -> int    mod
+    _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
+simplify2 o e1@(Const (Double _)) (Const (Int n2)) =
+  simplify2 o e1 (Const $ Int $ fromIntegral n2)
+simplify2 o (Const (Int n1)) e2@(Const (Double _)) =
+  simplify2 o (Const $ Int $ fromIntegral n1) e2
+simplify2 o e1@(Const (Double n1)) e2@(Const (Double n2)) =
+  let double f = Const $ Double $ f n1 n2
+      bool   f = Const $ Bool   $ f n1 n2 in
+  case o of
+    Plus  -> double (+)
+    Minus -> double (-)
+    Times -> double (*)
+    Div   -> double (/)
+    Eq    -> bool   (==)
+    Leq   -> bool   (<=)
+    Lt    -> bool   (<)
+    Max   -> double max
+    Min   -> double min
     _     -> error $ "Expr: found ill-typed expression " ++ show (pretty (BinOp o e1 e2))
 simplify2 o e1@(Const (Bool b1)) e2@(Const (Bool b2)) =
   let bool f = Const $ Bool $ f b1 b2 in
