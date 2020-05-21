@@ -45,7 +45,7 @@ module RandC (
   -- * Arithmetic expressions
   , int
   , double
-  , (.<-), (.<-$)
+  , (.<-), (.<-$), unif
   , (.+), (.-), (.*), (./), (.**)
   , min', max', log', div', mod', floor', ceil', round'
   , num
@@ -75,7 +75,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
-import Data.Text
+import Data.Text hiding (length)
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map.Strict as M
@@ -137,6 +137,14 @@ PE.Var v .<- rhs = do
   put $ S{sComs = Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : sComs, ..}
 
 e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
+
+-- | Return a uniform distribution over the values given by the expressions.
+-- For example, the snippet @x .<-$ unif [1, 2, 3]@ assigns one of @1@, @2@ or
+-- @3@ to @x@, each with a probability of @1/3@.
+unif :: [Expr] -> [(Double, Expr)]
+unif [] = error "Tried to take a uniform distribution over an empty list"
+unif es = [(p, e) | e <- es]
+  where p = 1 / fromIntegral (length es)
 
 -- | Similar to '.<-', but the assigned value is chosen by sampling.  For
 -- example, @v .<-$ [(0.3, 0), (0.7, 1)]@ sets @v@ to @0@ with probability
