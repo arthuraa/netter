@@ -96,8 +96,10 @@ haskellIf x y = if x <= 3 then y else x - 2
 -- The condition in the second if must be an expression of type 'Bool'.  When
 -- building a Prism model, we don't know in advance what the expression @x .<=
 -- 3@ will evaluate to, because @x@ is not set yet -- this will only happen when
--- running the model checker.  Whenever needed, we use primed names (if', when',
--- max', etc.) to distinguish RandC functions from their Haskell equivalents.
+-- running the model checker.  By contrast, when evaluating 'haskellIf' on some
+-- arguments, we can perform the test @x <= 3@ and decide which branch we need
+-- to execute.  Whenever needed, we use primed names (if', when', max', etc.) to
+-- distinguish RandC functions from their Haskell equivalents.
 
 -- Exercise 2: Define a function 'exercise2' that samples two variables 'x' and
 -- 'y' uniformly from 1 to 10 and stores their maximum in 'x'.  Use the if'
