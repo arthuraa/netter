@@ -46,6 +46,13 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 
+description:
+
+    /RandC/ is an embedded domain-specific language that compiles to Prism
+    models (<http://prismmodelchecker.com>).  The language has mutable scalar
+    variables and probabilistic assignment.  For more information, see the
+    "RandC" module.
+
 library
   -- Modules exported by the library.
   exposed-modules:
@@ -91,3 +98,4 @@ library
   
   ghc-options:         -Wall
                        -Wno-name-shadowing
+

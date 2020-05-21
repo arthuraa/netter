@@ -1,21 +1,68 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+{-|
+
+This module defines a simple imperative programming language.  Programs can
+manipulate scalar variables and sample values from a probability distribution.
+Loops, recursion and arrays are missing, but can be emulated to some extent.  A
+typical program looks like this:
+
+@
+prog :: Prog ()
+prog = ...
+
+-- Compile the program to a Prism model and print the output.
+main :: IO ()
+main = compile prog
+@
+
+-}
+
 module RandC (
+  -- * Expressions and commands
+  --
+  -- | The language has a fairly standard separation between expressions
+  -- ('Expr') and commands ('Prog').  Expressions map almost directly to
+  -- expressions in the Prism model checker, and include arithmetic on integers
+  -- and floating-point numbers, as well as logical operations.  Expressions are
+  -- not typed, and might lead to ill-formed output code; e.g. if you try to add
+  -- an integer to a boolean.
+  --
+  -- Commands include assignments, sampling and conditionals.  To avoid clashes
+  -- with common Haskell names, most infix operators are prefixed with @.@
+  -- (e.g. '.+'), and function names are primed (e.g. 'max'').  'Prog' has the
+  -- structure of a monad.  The type @Prog a@ is builds a partial Prism program
+  -- and returns a value of type 'a'.  When 'a' is '()', we can roughly view
+  -- this as a command.
+
     Expr
-  , Comp
-  , num
-  , int
-  , double
+  , Prog
+  -- * Variables and formulas
   , namedVar
   , var
   , formula
+  -- * Arithmetic expressions
+  , int
+  , double
   , (.<-), (.<-$)
   , (.+), (.-), (.*), (./), (.**)
+  , min', max', log', div', mod', floor', ceil', round'
+  , num
+  -- * Comparison
   , (.<=), (.<), (.==), (./=)
+  -- * Logical operations
+  , bool
   , (.&&), (.||)
+  -- * Ternary operator
+  --
+  -- | @cond .? ifTrue .: ifFalse@ is similar to the ternary operator in C-like
+  -- languages.  Since the Haskell syntax does not directly support mixfix
+  -- operators, we mimic this form with two infix operators.
   , (.?), (.:)
-  , min', max', log', mod', floor', ceil', round'
+  -- * Control flow
   , if', when', switch, orElse
+  -- * Compilation
   , compile, compileWith
   ) where
 
@@ -37,22 +84,35 @@ type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sFormulas :: M.Map Var Expr
-           , sComs :: [Imp.Com] }
+           , sComs     :: [Imp.Com] }
 
-type Comp a = StateT S Pass a
+type Prog a = StateT S Pass a
 
-{-# DEPRECATED num "Use int instead" #-}
--- TODO: Find a way of deprecating this
-num :: Int -> Expr
-num = int
-
+-- | Inject integers into expressions.  Note that 'Expr' is an instance of
+-- 'Num', so integer literals can be interpreted as expressions.
 int :: Int -> Expr
 int = PE.Const . PE.Int
 
+-- | Inject floating-point numbers into expressions.
 double :: Double -> Expr
 double = PE.Const . PE.Double
 
-namedVar :: Text -> Int -> Int -> Comp Expr
+-- | Inject booleans into expressions.
+bool :: Bool -> Expr
+bool = PE.Const . PE.Bool
+
+{-# DEPRECATED num "Use int instead" #-}
+num :: Int -> Expr
+num = int
+
+-- | @var lb ub@ creates a new integer variable in the interval @[lb .. ub]@.
+-- Variables are always initialized to the lower bound of their interval.
+var :: Int -> Int -> Prog Expr
+var = namedVar "_"
+
+-- | Similar to 'var', but allows us to choose the name of the variable output
+-- in the Prism model.  Useful for debugging.
+namedVar :: Text -> Int -> Int -> Prog Expr
 namedVar x lb ub = do
   when (lb > ub) $ throwError $ Error $
     "Invalid bounds for variable " ++ unpack x ++ ": " ++
@@ -60,28 +120,14 @@ namedVar x lb ub = do
 
   v <- fresh x
 
-  S{..} <- get
-
-  put $ S{sVarDecls = M.insert v (lb, ub) sVarDecls, ..}
+  modify $ \S{..} -> S{sVarDecls = M.insert v (lb, ub) sVarDecls, ..}
 
   return $ PE.Var v
 
-var :: Int -> Int -> Comp Expr
-var = namedVar "_"
-
-formula :: Text -> Expr -> Comp Expr
-formula x e = do
-  v <- fresh x
-
-  S{..} <- get
-
-  put $ S{sFormulas = M.insert v e sFormulas, ..}
-
-  return $ PE.Var v
-
--- Assignment operator used for Var
+-- | @v .<- e@ assigns the value of @e@ to the variable @v@.  If @v@ is some
+-- expression other than a variable, the compiler throws an error.
 infix 1 .<-
-(.<-) :: Expr -> Expr -> Comp ()
+(.<-) :: Expr -> Expr -> Prog ()
 PE.Var v .<- rhs = do
   S{..} <- get
 
@@ -92,16 +138,11 @@ PE.Var v .<- rhs = do
 
 e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
-infix 1 .?
-(.?) :: Expr -> Expr -> Expr -> Expr
-e .? eThen = PE.If e eThen
-
-infix 0 .:
-(.:) :: (Expr -> Expr) -> Expr -> Expr
-(.:) = id
-
+-- | Similar to '.<-', but the assigned value is chosen by sampling.  For
+-- example, @v .<-$ [(0.3, 0), (0.7, 1)]@ sets @v@ to @0@ with probability
+-- @0.3@, and to @1@ with probability @0.7@.  The probabilities must sum to one.
 infix 1 .<-$
-(.<-$) :: Expr -> [(Double, Expr)] -> Comp ()
+(.<-$) :: Expr -> [(Double, Expr)] -> Prog ()
 PE.Var v .<-$ rhs = do
   S decls defs coms <- get
 
@@ -112,7 +153,37 @@ PE.Var v .<-$ rhs = do
 
 e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
-if' :: Expr -> Comp () -> Comp () -> Comp ()
+-- | @formula f e@ creates a formula @f@ in the Prism model that evaluates to
+-- @e@.  Note that the value of a formula is computed where it is used, not
+-- where it is defined.  For example, in the following program, the final value
+-- of @y@ is @1@, not @0@.
+--
+-- @
+-- x  <- var 0 10
+-- y  <- var 0 10
+-- x .<- 0
+-- f  <- formula "f" x
+-- x .<- 1
+-- y  <- f
+-- @
+formula :: Text -> Expr -> Prog Expr
+formula x e = do
+  v <- fresh x
+
+  modify $ \S{..} -> S{sFormulas = M.insert v e sFormulas, ..}
+
+  return $ PE.Var v
+
+infix 1 .?
+(.?) :: Expr -> Expr -> Expr -> Expr
+e .? eThen = PE.If e eThen
+
+infix 0 .:
+(.:) :: (Expr -> Expr) -> Expr -> Expr
+(.:) = id
+
+-- | If statement
+if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
   S decls defs coms <- get
 
@@ -128,87 +199,124 @@ if' e cThen cElse = do
 
   put $ S decls'' defsElse (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
 
-switch :: [(Expr, Comp ())] -> Comp ()
+-- | A chain of if statements.  The command
+-- @
+-- switch [(c1, e1), ..., (cn, en), (orElse, eElse)]
+-- @
+-- is equivalent to
+-- @
+-- if' c1 e1 (... (if' cn en eElse) ...)
+-- @
+switch :: [(Expr, Prog ())] -> Prog ()
 switch [] = return ()
 switch ((cond, e) : branches) = if' cond e (switch branches)
 
+-- | A synonym for @bool True@ to make 'switch' more readable.
 orElse :: Expr
-orElse = PE.Const (PE.Bool True)
+orElse = bool True
 
-when' :: Expr -> Comp () -> Comp ()
+-- | Like 'if'', but without an else branch.
+when' :: Expr -> Prog () -> Prog ()
 when' e c = if' e c (return ())
 
+-- | Round a number up to the nearest integer.
 ceil' :: Expr -> Expr
 ceil' = PE.UnOp PE.Ceil
 
+-- | Round a number down to the nearest integer.
 floor' :: Expr -> Expr
 floor' = PE.UnOp PE.Floor
 
+-- | Round a number to the nearest integer.
 round' :: Expr -> Expr
 round' = PE.UnOp PE.Round
 
+-- | Maximum of two numbers.
 max' :: Expr -> Expr -> Expr
 max' = PE.BinOp PE.Max
 
+-- | Minimum of two numbers.
 min' :: Expr -> Expr -> Expr
 min' = PE.BinOp PE.Min
 
+-- | @mod' a b@ computes the remainder of the integer division of @a@ by @b@.
 mod' :: Expr -> Expr -> Expr
 mod' = PE.BinOp PE.Mod
 
+-- | @log' a b@ returns the logarithm of @a@ in the base @b@.
 log' :: Expr -> Expr -> Expr
 log' = PE.BinOp PE.Log
 
+-- | Logical and.
 infixr 3 .&&
 (.&&) :: Expr -> Expr -> Expr
 (.&&) = PE.BinOp PE.And
 
+-- | Logical or.
 infixr 2 .||
 (.||) :: Expr -> Expr -> Expr
 (.||) = PE.BinOp PE.Or
 
+-- | Multiplication.
 infixl 7 .*
 (.*) :: Expr -> Expr -> Expr
 (.*) = PE.BinOp PE.Times
 
+-- | @a .** b@ raises @a@ to the power @b@.
 infix 8 .**
 (.**) :: Expr -> Expr -> Expr
 (.**) = PE.BinOp PE.Pow
 
+-- | Floating-point division.
 infixl 7 ./
 (./) :: Expr -> Expr -> Expr
 (./) = PE.BinOp PE.Div
 
+-- | Integer division.
+div' :: Expr -> Expr -> Expr
+div' e1 e2 = floor' (e1 ./ e2)
+
+-- | Addition.
 infixl 6 .+
 (.+) :: Expr -> Expr -> Expr
 (.+) = PE.BinOp PE.Plus
 
+-- | Subtraction.
 infixl 6 .-
 (.-) :: Expr -> Expr -> Expr
 (.-) = PE.BinOp PE.Minus
 
+-- | Equality test.
 infix 4 .==
 (.==) :: Expr -> Expr -> Expr
 e1 .== e2 = PE.BinOp PE.Eq e1 e2
 
+-- | Test if two values are different.
 infix 4 ./=
 (./=) :: Expr -> Expr -> Expr
 e1 ./= e2 = PE.UnOp PE.Not (e1 .== e2)
 
+-- | Compare numbers for ordering.
 infix 4 .<=
 (.<=) :: Expr -> Expr -> Expr
 (.<=) = PE.BinOp PE.Leq
 
+-- | Compare numbers for strict ordering.
 infix 4 .<
 (.<) :: Expr -> Expr -> Expr
 (.<) = PE.BinOp PE.Lt
 
-compileWith :: Options -> Comp () -> IO ()
+-- | Similar to 'compile', but reads the options from its first argument rather
+-- than from the command line.
+compileWith :: Options -> Prog () -> IO ()
 compileWith opts prog = doPass opts $ do
   ((), S decls defs coms) <- runStateT prog $ S M.empty M.empty []
   Compiler.compile (Imp.Program decls defs (Imp.revSeq coms))
 
-compile :: Comp () -> IO ()
+-- | Compile a program to Prism code, printing the result on standard output.
+-- The behavior of the compiler can be tweaked by command-line options
+-- (cf. 'RandC.Options.Options').
+compile :: Prog () -> IO ()
 compile prog = do
   opts <- readOptions
   compileWith opts prog

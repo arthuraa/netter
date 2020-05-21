@@ -1,18 +1,25 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+
+-- | Options to tweak the behavior of the compiler.
+
 module RandC.Options where
 
 import System.Console.CmdArgs.Implicit
 
-data Target = Imp
-            | CFG
-            | UPA
-            | Prism
+data Target = Imp   -- ^ The internal representation of programs
+                    -- built by the 'RandC.Prog' monad.
+            | CFG   -- ^ The first intermediate pass: convert the syntax of
+                    -- 'Imp' commands into a control-flow graph.
+            | UPA   -- ^ The last intermediate pass: introduce a PC variable to
+                    -- keep track of which CFG node to execute.
+            | Prism -- ^ Prism source code
   deriving (Ord, Eq, Read, Show, Data, Typeable)
 
-data Options = Options { target   :: Target
-                       , inlining :: Bool
-                       , merge    :: Bool
-                       , simplify :: Bool }
+data Options = Options { target   :: Target  -- ^ The compilation target
+                       , inlining :: Bool    -- ^ Perform inlining
+                       , merge    :: Bool    -- ^ Perform assignments in parallel when possible
+                       , simplify :: Bool    -- ^ Perform simplications
+                       }
   deriving (Ord, Eq, Show, Data, Typeable)
 
 defaultOptions :: Options
