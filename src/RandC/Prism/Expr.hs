@@ -137,6 +137,13 @@ instance Num Expr where
   signum = undefined
   fromInteger i = Const $ Int $ fromInteger i
 
+instance Enum Expr where
+  succ (Const (Int n)) = Const (Int (succ n))
+  succ _ = error "Tried to take the successor of a non-constant"
+  toEnum = Const . Int
+  fromEnum (Const (Int n)) = n
+  fromEnum _ = error "Tried to convert non-constant to integer"
+
 substM :: Monad m => (Var -> m Expr) -> Expr -> m Expr
 substM s e = go e
   where go (Var v)            = s v
