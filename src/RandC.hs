@@ -1,5 +1,23 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-module RandC where
+module RandC (
+    Expr
+  , Comp
+  , num
+  , int
+  , double
+  , namedVar
+  , var
+  , formula
+  , (.<-), (.<-$)
+  , (.+), (.-), (.*), (./), (.**)
+  , (.<=), (.<), (.==), (./=)
+  , (.&&), (.||)
+  , (.?), (.:)
+  , min', max', log', mod', floor', ceil', round'
+  , if', when', switch, orElse
+  , compile, compileWith
+  ) where
 
 import RandC.Prob
 import RandC.Var
@@ -23,12 +41,13 @@ data S = S { sVarDecls :: M.Map Var (Int, Int)
 
 type Comp a = StateT S Pass a
 
+{-# DEPRECATED num "Use int instead" #-}
 -- TODO: Find a way of deprecating this
 num :: Int -> Expr
-num = PE.Const . PE.Int
+num = int
 
 int :: Int -> Expr
-int = num
+int = PE.Const . PE.Int
 
 double :: Double -> Expr
 double = PE.Const . PE.Double
@@ -41,11 +60,9 @@ namedVar x lb ub = do
 
   v <- fresh x
 
-  S decls defs coms <- get
+  S{..} <- get
 
-  let decls' = M.insert v (lb, ub) decls
-
-  put $ S decls' defs coms
+  put $ S{sVarDecls = M.insert v (lb, ub) sVarDecls, ..}
 
   return $ PE.Var v
 
@@ -56,11 +73,9 @@ formula :: Text -> Expr -> Comp Expr
 formula x e = do
   v <- fresh x
 
-  S decls defs coms <- get
+  S{..} <- get
 
-  let defs' = M.insert v e defs
-
-  put $ S decls defs' coms
+  put $ S{sFormulas = M.insert v e sFormulas, ..}
 
   return $ PE.Var v
 
@@ -68,12 +83,12 @@ formula x e = do
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Comp ()
 PE.Var v .<- rhs = do
-  S decls defs coms <- get
+  S{..} <- get
 
-  when (not $ M.member v decls) $ do
+  when (not $ M.member v sVarDecls) $ do
     throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
 
-  put $ S decls defs (Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : coms)
+  put $ S{sComs = Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : sComs, ..}
 
 e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
