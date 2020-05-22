@@ -30,7 +30,7 @@ updateAssn assns id block =
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
 
-  Src.Program decls defs maxId blocks <- ensureTarget UPA prog
+  Src.Program decls defs rews maxId blocks <- ensureTarget UPA prog
 
   pc <- fresh "pc"
 
@@ -55,7 +55,9 @@ compile prog = do
           [ (conj (checkPc n : guard), fmap (Tgt.Assn . M.singleton v) e)
           | (n, ge) <- M.assocs assns, (guard, e) <- flatten ge ]
 
+  let rewards = M.map (\e -> [(checkPc 0, e), (UnOp Not $ checkPc 0, 0)]) rews
+
   let modules = [ Tgt.Module (M.singleton v (lb, ub)) (actions v)
                 | (v, (lb, ub)) <- M.assocs decls' ]
 
-  return $ Tgt.Program defs modules
+  return $ Tgt.Program defs rewards modules

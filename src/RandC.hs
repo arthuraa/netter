@@ -38,10 +38,11 @@ module RandC (
 
     Expr
   , Prog
-  -- * Variables and formulas
+  -- * Variables, formulas and rewards
   , namedVar
   , var
   , formula
+  , rewards
   -- * Arithmetic expressions
   , int
   , double
@@ -84,6 +85,7 @@ type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sFormulas :: M.Map Var Expr
+           , sRewards  :: M.Map Text Expr
            , sComs     :: [Imp.Com] }
 
 type Prog a = StateT S Pass a
@@ -152,12 +154,12 @@ unif es = [(p, e) | e <- es]
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Prog ()
 PE.Var v .<-$ rhs = do
-  S decls defs coms <- get
+  S decls defs rews coms <- get
 
   when (not $ M.member v decls) $ do
     throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
 
-  put $ S decls defs (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : coms)
+  put $ S decls defs rews (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : coms)
 
 e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
@@ -182,6 +184,19 @@ formula x e = do
 
   return $ PE.Var v
 
+-- | @rewards x e@ declares @x@ as a new reward.  Prism can check various
+-- properties of rewards; e.g. their average stationary value, maximum, minimum,
+-- etc.
+rewards :: String -> Expr -> Prog ()
+rewards x e = do
+  let x' = pack x
+
+  S{..} <- get
+
+  case M.lookup x' sRewards of
+    Just _  -> throwError $ Error $ "Redefining reward " ++ unpack x'
+    Nothing -> put S{sRewards = M.insert x' e sRewards, ..}
+
 infix 1 .?
 (.?) :: Expr -> Expr -> Expr -> Expr
 e .? eThen = PE.If e eThen
@@ -193,19 +208,19 @@ infix 0 .:
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
-  S decls defs coms <- get
+  S decls defs rews coms <- get
 
-  put $ S decls defs []
+  put $ S decls defs rews []
   cThen
 
-  S decls' defsThen comsThen <- get
+  S decls' defsThen rewsThen comsThen <- get
 
-  put $ S decls' defsThen []
+  put $ S decls' defsThen rewsThen []
   cElse
 
-  S decls'' defsElse comsElse <- get
+  S decls'' defsElse rewsElse comsElse <- get
 
-  put $ S decls'' defsElse (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
+  put $ S decls'' defsElse rewsElse (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
 
 -- | A chain of if statements.  The command
 -- @
@@ -318,8 +333,8 @@ infix 4 .<
 -- than from the command line.
 compileWith :: Options -> Prog () -> IO ()
 compileWith opts prog = doPass opts $ do
-  ((), S decls defs coms) <- runStateT prog $ S M.empty M.empty []
-  Compiler.compile (Imp.Program decls defs (Imp.revSeq coms))
+  ((), S decls defs rews coms) <- runStateT prog $ S M.empty M.empty M.empty []
+  Compiler.compile (Imp.Program decls defs rews (Imp.revSeq coms))
 
 -- | Compile a program to Prism code, printing the result on standard output.
 -- The behavior of the compiler can be tweaked by command-line options

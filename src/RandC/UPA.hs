@@ -1,9 +1,12 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module RandC.UPA where
 
 import RandC.Var
 import RandC.Prob
 import RandC.Prism.Expr
 
+import Data.Text (Text)
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 
@@ -14,6 +17,7 @@ data Module = Module (M.Map Var (Int, Int)) [(Expr, P Assn)]
   deriving (Show, Eq)
 
 data Program = Program { pDefs :: M.Map Var Expr
+                       , pRewards :: M.Map Text [(Expr, Expr)]
                        , pMods :: [Module] }
   deriving (Show, Eq)
 
@@ -35,7 +39,9 @@ instance Pretty Module where
                  brackets $ cat [pretty lb, pretty "..", pretty ub]]
 
 instance Pretty Program where
-  pretty (Program defs mods) =
+  pretty Program{..} =
     vcat $ [ sep [pretty "def", pretty v, pretty "=", pretty e]
-           | (v, e) <- M.assocs defs] ++
-           map pretty mods
+           | (v, e) <- M.assocs pDefs] ++
+           [ sep [pretty "reward", pretty v, pretty "=", pretty e]
+           | (v, e) <- M.assocs pRewards] ++
+           map pretty pMods

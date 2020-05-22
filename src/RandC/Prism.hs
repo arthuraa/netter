@@ -1,9 +1,12 @@
+{-# LANGUAGE RecordWildCards, OverloadedStrings #-}
+
 module RandC.Prism where
 
 import RandC.Var
 import RandC.Prism.Expr
 import RandC.Prob
 
+import Data.Text (Text)
 import Data.Text.Prettyprint.Doc
 
 -- Assignments
@@ -14,15 +17,14 @@ data Assn = Assn { aLHS :: Var
   deriving (Show, Eq)
 
 instance Pretty Assn where
-  pretty (Assn v e) = parens $ sep [pretty v <> pretty "'", pretty "=", pretty e]
+  pretty (Assn v e) = parens $ sep [pretty v <> "'", "=", pretty e]
 
 newtype Assns = Assns [Assn]
 
 instance Pretty Assns where
-  pretty (Assns []) =
-    pretty "true"
+  pretty (Assns []) = "true"
   pretty (Assns assns) =
-    encloseSep (pretty "") (pretty "") (pretty "&") $ map pretty assns
+    encloseSep "" "" "&" $ map pretty assns
 
 -- Transitions
 --
@@ -34,7 +36,7 @@ data Transition = Transition { tCond :: Expr
 
 instance Pretty Transition where
   pretty (Transition c probs) =
-    sep [pretty "[step]", pretty c, pretty "->", pretty probs <> pretty ";"]
+    sep ["[step]", pretty c, "->", pretty probs <> ";"]
 
 -- Variable declarations
 --
@@ -46,8 +48,8 @@ data VarDecl = VarDecl { vName :: Var
 instance Pretty VarDecl where
   pretty (VarDecl v lb ub) =
     sep [pretty v,
-         pretty ":", brackets $ cat [pretty lb, pretty "..", pretty ub]]
-    <> pretty ";"
+         ":", brackets $ cat [pretty lb, "..", pretty ub]]
+    <> ";"
 
 -- Module
 --
@@ -61,10 +63,10 @@ data Module = Module { mId :: Int
 
 instance Pretty Module where
   pretty (Module n decls transitions) =
-    vcat [ pretty "module m" <> pretty n
+    vcat [ "module m" <> pretty n
          , vcat $ map pretty decls
          , vcat $ map pretty transitions
-         , pretty "endmodule" ]
+         , "endmodule" ]
 
 -- Formula
 --
@@ -75,17 +77,37 @@ data Formula = Formula { fName :: Var
 
 instance Pretty Formula where
   pretty (Formula v e) =
-    sep [pretty "formula", pretty v, pretty "=", pretty e] <> pretty ";"
+    sep ["formula", pretty v, "=", pretty e] <> ";"
+
+-- Reward
+-- rewards "r"
+--   [step] c1 -> e1;
+--   ..
+--   [step] cn -> en;
+-- endrewards
+
+data Rewards = Rewards { rName    :: Text
+                       , rClauses :: [(Expr, Expr)] }
+
+instance Pretty Rewards where
+  pretty Rewards{..} =
+    vcat [ "rewards" <+> dquotes (pretty rName)
+         , vcat [ pretty cond <+> ":" <+> pretty e <+> ";"
+                | (cond, e) <- rClauses ]
+         , "endrewards" ]
 
 -- Program
 --
 -- dtmc
 -- <formula>*
 -- <module>*
-data Program = Program [Formula] [Module]
+data Program = Program { pFormulas :: [Formula]
+                       , pRewards  :: [Rewards]
+                       , pMods     :: [Module] }
 
 instance Pretty Program where
-  pretty (Program fs ms) =
-    vcat [ pretty "dtmc"
-         , vcat $ map pretty fs
-         , vcat $ map pretty ms ]
+  pretty Program{..} =
+    vcat [ "dtmc"
+         , vcat $ map pretty pFormulas
+         , vcat $ map pretty pMods
+         , vcat $ map pretty pRewards ]

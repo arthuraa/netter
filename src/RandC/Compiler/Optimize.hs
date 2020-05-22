@@ -72,12 +72,12 @@ mergeCom :: StateDeps -> Com -> Com
 mergeCom deps (Com is) = Com $ mergeInstrs deps is
 
 merge :: Program -> Program
-merge (Program decl defs blocks) =
-  Program decl defs $ mergeCom (definitionStateDeps defs) blocks
+merge (Program decl defs rews blocks) =
+  Program decl defs rews $ mergeCom (definitionStateDeps defs) blocks
 
 simplify :: Program -> Program
-simplify (Program decls defs com) =
-  Program decls (M.map PE.simplify defs) (simplifyCom com)
+simplify (Program decls defs rews com) =
+  Program decls (M.map PE.simplify defs) (M.map PE.simplify rews) (simplifyCom com)
 
 simplifyCom :: Com -> Com
 simplifyCom (Com is) = Com $ simplifyInstrs is

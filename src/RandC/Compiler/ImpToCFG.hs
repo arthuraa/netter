@@ -51,7 +51,7 @@ compileInstrs deps (Src.If e cThen cElse : is) next = do
 
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
-  Src.Program decls defs com <- ensureTarget CFG prog
+  Src.Program decls defs rews com <- ensureTarget CFG prog
   -- In principle we should not have to compute this value again, since we
   -- compute it already when optimizing the program.  However, the dependency
   -- map could be invalidated after applying certain program transformations, so
@@ -63,4 +63,4 @@ compile prog = do
   let (next, (maxId, blocks)) = runState res initialState
   let initialBlock = Tgt.Block M.empty next
   let blocks' = M.insert 0 initialBlock blocks
-  return $ Tgt.Program decls defs maxId blocks'
+  return $ Tgt.Program decls defs rews maxId blocks'
