@@ -107,3 +107,30 @@ haskellIf x y = if x <= 3 then y else x - 2
 
 exercise2 :: Prog ()
 exercise2 = undefined -- Fill in here
+
+-- The 'when'' function is a variant of 'if'' that does not require an else
+-- branch:
+
+whenExample :: Prog ()
+whenExample = do
+  x  <- var 1 10
+  x .<- unif [1 .. 10]
+  when' (x .<= 3) $ do
+    x .<- 1
+
+-- (Note the use of the application operator '$' to avoid wrapping the @do@
+-- block in parentheses.)
+
+-- If you want to nest conditionals, it might be better to use the 'switch'
+-- function instead:
+
+switchExample :: Prod ()
+switchExample = do
+  x  <- var 1 20
+  x .<- unif [1 .. 10]
+  switch [ (x .== 2, do
+               x .<- 1)
+         , (x .== 4, do
+               x .<- 2)
+         , (orElse, do
+               x .<- 5) ]
