@@ -15,19 +15,22 @@ data Target = Imp   -- ^ The internal representation of programs
             | Prism -- ^ Prism source code
   deriving (Ord, Eq, Read, Show, Data, Typeable)
 
-data Options = Options { target   :: Target  -- ^ The compilation target
-                       , inlining :: Bool    -- ^ Perform inlining
-                       , merge    :: Bool    -- ^ Perform assignments in parallel when possible
-                       , simplify :: Bool    -- ^ Perform simplications
+data Options = Options { target   :: Target         -- ^ The compilation target
+                       , inlining :: Bool           -- ^ Perform inlining
+                       , merge    :: Bool           -- ^ Perform assignments in parallel when possible
+                       , simplify :: Bool           -- ^ Perform simplications
+                       , output   :: Maybe FilePath -- ^ Output file
                        }
   deriving (Ord, Eq, Show, Data, Typeable)
 
 defaultOptions :: Options
 defaultOptions =
-  Options { target   = Prism &= help "Output format"
-          , inlining = True  &= help "Perform inlining"
-          , merge    = True  &= help "Perform assignments in parallel when possible"
-          , simplify = True  &= help "Perform simplifications" }
+  Options { target   = Prism   &= help "Output format"
+          , inlining = True    &= help "Perform inlining"
+          , merge    = True    &= help "Perform assignments in parallel when possible"
+          , simplify = True    &= help "Perform simplifications"
+          , output   = Nothing &= help "Output file. If none is present, output to stdout."
+          }
 
 readOptions :: IO Options
 readOptions =

@@ -7,6 +7,8 @@ import Data.Functor.Identity
 import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
 import Control.Monad.Except
+import System.IO
+import System.Exit
 
 data Result = Done String
             | Error String
@@ -28,9 +30,16 @@ runPass :: Options -> Pass a -> Either Result a
 runPass opts (Pass f) =
   fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars
 
+doOutput :: Maybe String -> String -> IO ()
+doOutput Nothing  res = putStrLn res
+doOutput (Just f) res =
+  withFile f WriteMode $ \h -> hPutStrLn h res
+
 doPass :: Pretty a => Options -> Pass a -> IO ()
 doPass opts pass =
   case runPass opts pass of
-    Left  (Error e) -> putStrLn $ "Error: " ++ e
-    Left  (Done  r) -> putStrLn r
-    Right r -> putStrLn $ show $ pretty r
+    Left  (Error e) -> do
+      hPutStrLn stderr $ "Error: " ++ e
+      exitWith $ ExitFailure (-1)
+    Left  (Done  r) -> doOutput (output opts) r
+    Right r         -> doOutput (output opts) $ show $ pretty r
