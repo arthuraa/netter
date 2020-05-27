@@ -57,3 +57,6 @@ instance Pretty Program where
          , vcat [ sep [ pretty "reward", pretty v, pretty "=", pretty e, pretty ";" ]
                 | (v, e) <- M.assocs pRewards ]
          , pretty pCom ]
+
+switch :: [(Expr, Com)] -> Com
+switch = foldr (\(e, branch) acc -> Com [If e branch acc]) skip

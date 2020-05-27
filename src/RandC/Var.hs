@@ -23,6 +23,7 @@ import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.Cont
 import Data.Functor.Identity
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -85,6 +86,11 @@ instance MonadFresh m => MonadFresh (ReaderT e m) where
 
 instance MonadFresh m => MonadFresh (StateT s m) where
   fresh x = StateT $ \s -> fresh x >>= \v -> return (v, s)
+
+instance MonadFresh m => MonadFresh (ContT r m) where
+  fresh x = ContT $ \k -> do
+    v <- fresh x
+    k v
 
 (|+|) :: M.Map Var Int -> M.Map Var Int -> M.Map Var Int
 cs1 |+| cs2 =

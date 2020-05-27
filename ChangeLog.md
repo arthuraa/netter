@@ -6,5 +6,10 @@
 
 ## 0.1.1.0  -- 2020-05-27
 
-* Many new features.  Block-scoped local variables.
+* Block-scoped local variables
 
+* Expression evaluation
+
+* List indexing
+
+* ... many other features.

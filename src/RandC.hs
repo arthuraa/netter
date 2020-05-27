@@ -1,5 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {-|
 
@@ -43,13 +46,14 @@ module RandC (
   , var
   , formula
   , rewards
-  -- * Arithmetic expressions
+  -- * Expressions
   , int
   , double
   , (.<-), (.<-$), unif
   , (.+), (.-), (.*), (./), (.**)
   , min', max', log', div', mod', floor', ceil', round'
   , num
+  , (.!!)
   -- * Comparison
   , (.<=), (.<), (.==), (./=)
   -- * Logical operations
@@ -62,7 +66,7 @@ module RandC (
   -- operators, we mimic this form with two infix operators.
   , (.?), (.:)
   -- * Control flow
-  , block, if', when', switch, orElse
+  , eval, block, if', when', switch, orElse
   -- * Compilation
   , compile, compileWith
   ) where
@@ -76,9 +80,11 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
-import Data.Text hiding (length)
+import Data.Text hiding (length, foldr, zip)
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.State
+import Control.Monad.Cont
 import qualified Data.Map.Strict as M
 import Data.Set (Set)
 import qualified Data.Set as S
@@ -91,7 +97,19 @@ data S = S { sVarDecls :: M.Map Var (Int, Int)
            , sRewards  :: M.Map Text Expr
            , sComs     :: [Imp.Com] }
 
-type Prog a = StateT S Pass a
+type Builder = StateT S Pass
+
+newtype Prog a = Prog {runProg :: ContT () Builder a}
+  deriving (Applicative, Functor, Monad,
+            MonadState S, MonadReader Options,
+            MonadFresh, MonadCont)
+
+instance MonadError Result Prog where
+  throwError = Prog . lift . throwError
+  catchError (Prog f) h =
+    Prog $ ContT
+    $ \k -> catchError (runContT f k)
+    $ \e -> runContT (runProg $ h e) k
 
 -- | Inject integers into expressions.  Note that 'Expr' is an instance of
 -- 'Num', so integer literals can be interpreted as expressions.
@@ -209,6 +227,57 @@ infix 0 .:
 (.:) :: (Expr -> Expr) -> Expr -> Expr
 (.:) = id
 
+flushCom :: MonadState S m => m () -> m Imp.Com
+flushCom f = do
+  S{sComs = coms0, ..} <- get
+  put S{sComs = [], ..}
+  f
+  S{sComs = coms1, ..} <- get
+  put S{sComs = coms0, ..}
+  return $ Imp.revSeq coms1
+
+addCom :: MonadState S m => Imp.Com -> m ()
+addCom c = modify $ \S{..} -> S{sComs = c : sComs, ..}
+
+parEval :: [a] -> ([(a, Imp.Com)] -> Builder ()) -> Prog a
+parEval xs k1 = Prog $ ContT $ \k0 -> do
+  cs <- forM xs $ \x -> do
+    c <- flushCom $ k0 x
+    return (x, c)
+  k1 cs
+
+infixl 9 .!!
+
+-- | Index into a list using an expression.  This is compiled by testing if the
+-- expression is equal to each possible index in the list, and thus quite
+-- inefficient.
+
+(.!!) :: [a] -> Expr -> Prog a
+xs .!! e = do
+  (x, _) <- parEval (zip xs [0..])
+            $ \bs -> addCom $ Imp.switch [(e .== int i, c) | ((_, i), c) <- bs]
+  return x
+
+-- | Evaluate an expression so that it can be used as an integer inside of
+-- Haskell.  We cannot know in advance what value the expression will take, so
+-- the compilation strategy is very inefficient: we test whether the expression
+-- is equal to each value it can take.  Thus, you should only use this function
+-- if you know there isn't a way of deferring evaluation to the Prism side.
+
+eval :: Expr -> Prog Int
+eval e@(PE.Var v) = do
+  S{..} <- get
+  case M.lookup v sVarDecls of
+    Just (lb, ub) ->
+      parEval [lb .. ub]
+      $ \bs -> addCom $ Imp.switch [(e .== int i, c) | (i, c) <- bs]
+
+    Nothing ->
+      error $ "Undeclared variable " ++ show v
+
+eval e = do
+  error $ "Cannot evaluate non-variable yet (got " ++ show e ++ ")"
+
 -- | Variables declared in a block are local and automatically deallocated when
 -- the block finishes.  This can help reduce the state space of the generated
 -- model.
@@ -227,21 +296,9 @@ block f = do
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
-  S decls locals defs rews coms <- get
-
-  put $ S decls locals defs rews []
-  cThen
-
-  S decls' localsThen defsThen rewsThen comsThen <- get
-
-  put $ S decls' localsThen defsThen rewsThen []
-  cElse
-
-  S decls'' localsElse defsElse rewsElse comsElse <- get
-
-  let coms' = Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms
-
-  put $ S decls'' localsElse defsElse rewsElse coms'
+  comThen <- flushCom cThen
+  comElse <- flushCom cElse
+  addCom $ Imp.Com [Imp.If e comThen comElse]
 
 -- | A chain of if statements.  The command
 -- @
@@ -353,8 +410,9 @@ infix 4 .<
 -- | Similar to 'compile', but reads the options from its first argument rather
 -- than from the command line.
 compileWith :: Options -> Prog () -> IO ()
-compileWith opts prog = doPass opts $ do
-  ((), S decls _locals defs rews coms) <- runStateT prog $ S M.empty S.empty M.empty M.empty []
+compileWith opts (Prog prog) = doPass opts $ do
+  let prog' = runContT prog $ \_ -> return ()
+  ((), S decls _locals defs rews coms) <- runStateT prog' $ S M.empty S.empty M.empty M.empty []
   Compiler.compile (Imp.Program decls defs rews (Imp.revSeq coms))
 
 -- | Compile a program to Prism code, printing the result on standard output.
