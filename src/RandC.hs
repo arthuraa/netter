@@ -62,7 +62,7 @@ module RandC (
   -- operators, we mimic this form with two infix operators.
   , (.?), (.:)
   -- * Control flow
-  , if', when', switch, orElse
+  , block, if', when', switch, orElse
   -- * Compilation
   , compile, compileWith
   ) where
@@ -80,10 +80,13 @@ import Data.Text hiding (length)
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map.Strict as M
+import Data.Set (Set)
+import qualified Data.Set as S
 
 type Expr = PE.Expr
 
 data S = S { sVarDecls :: M.Map Var (Int, Int)
+           , sLocals   :: Set Var
            , sFormulas :: M.Map Var Expr
            , sRewards  :: M.Map Text Expr
            , sComs     :: [Imp.Com] }
@@ -122,7 +125,8 @@ namedVar x lb ub = do
 
   v <- fresh x
 
-  modify $ \S{..} -> S{sVarDecls = M.insert v (lb, ub) sVarDecls, ..}
+  modify $ \S{..} -> S{sVarDecls = M.insert v (lb, ub) sVarDecls,
+                       sLocals   = S.insert v sLocals, ..}
 
   return $ PE.Var v
 
@@ -154,12 +158,12 @@ unif es = [(p, e) | e <- es]
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Prog ()
 PE.Var v .<-$ rhs = do
-  S decls defs rews coms <- get
+  S{..} <- get
 
-  when (not $ M.member v decls) $ do
+  when (not $ M.member v sVarDecls) $ do
     throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
 
-  put $ S decls defs rews (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : coms)
+  put $ S{sComs = Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : sComs, ..}
 
 e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
@@ -205,22 +209,39 @@ infix 0 .:
 (.:) :: (Expr -> Expr) -> Expr -> Expr
 (.:) = id
 
+-- | Variables declared in a block are local and automatically deallocated when
+-- the block finishes.  This can help reduce the state space of the generated
+-- model.
+
+block :: Prog () -> Prog ()
+block f = do
+  S{sLocals = sLocals0, ..} <- get
+  put S{sLocals = S.empty, ..}
+  f
+  S{sLocals = sLocals1, ..} <- get
+  forM_ (S.toList sLocals1) $ \v ->
+    let (lb, _) = sVarDecls M.! v in
+      PE.Var v .<- int lb
+  put S{sLocals = sLocals0, ..}
+
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
-  S decls defs rews coms <- get
+  S decls locals defs rews coms <- get
 
-  put $ S decls defs rews []
+  put $ S decls locals defs rews []
   cThen
 
-  S decls' defsThen rewsThen comsThen <- get
+  S decls' localsThen defsThen rewsThen comsThen <- get
 
-  put $ S decls' defsThen rewsThen []
+  put $ S decls' localsThen defsThen rewsThen []
   cElse
 
-  S decls'' defsElse rewsElse comsElse <- get
+  S decls'' localsElse defsElse rewsElse comsElse <- get
 
-  put $ S decls'' defsElse rewsElse (Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms)
+  let coms' = Imp.Com [Imp.If e (Imp.revSeq comsThen) (Imp.revSeq comsElse)] : coms
+
+  put $ S decls'' localsElse defsElse rewsElse coms'
 
 -- | A chain of if statements.  The command
 -- @
@@ -333,7 +354,7 @@ infix 4 .<
 -- than from the command line.
 compileWith :: Options -> Prog () -> IO ()
 compileWith opts prog = doPass opts $ do
-  ((), S decls defs rews coms) <- runStateT prog $ S M.empty M.empty M.empty []
+  ((), S decls _locals defs rews coms) <- runStateT prog $ S M.empty S.empty M.empty M.empty []
   Compiler.compile (Imp.Program decls defs rews (Imp.revSeq coms))
 
 -- | Compile a program to Prism code, printing the result on standard output.

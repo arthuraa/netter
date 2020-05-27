@@ -10,7 +10,7 @@ name:                randc
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.1.0.0
+version:             0.1.1.0
 
 -- A short (one-line) description of the package.
 -- synopsis:            
@@ -22,7 +22,7 @@ version:             0.1.0.0
 license:             MIT
 
 -- The file containing the license text.
-license-file:        LICENSE
+license-file:        ../LICENSE
 
 -- The package author(s).
 author:              Arthur Azevedo de Amorim
@@ -40,7 +40,7 @@ build-type:          Simple
 
 -- Extra files to be distributed with the package, such as examples or a 
 -- README.
-extra-source-files:  ChangeLog.md
+extra-source-files:  ../ChangeLog.md
 
 -- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10

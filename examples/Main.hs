@@ -134,3 +134,5 @@ switchExample = do
                x .<- 2)
          , (orElse, do
                x .<- 5) ]
+
+-- ('orElse' is just a synonym for @bool True@)
