@@ -283,15 +283,16 @@ eval e = do
 -- model.
 
 block :: Prog () -> Prog ()
-block f = do
+block (Prog f) = Prog $ ContT $ \k -> do
   S{sLocals = sLocals0, ..} <- get
   put S{sLocals = S.empty, ..}
-  f
+  runContT f return
   S{sLocals = sLocals1, ..} <- get
   forM_ (S.toList sLocals1) $ \v ->
     let (lb, _) = sVarDecls M.! v in
-      PE.Var v .<- int lb
+      addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
   modify $ \S{..} -> S{sLocals = sLocals0, ..}
+  k ()
 
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
