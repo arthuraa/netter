@@ -222,7 +222,7 @@ block f = do
   forM_ (S.toList sLocals1) $ \v ->
     let (lb, _) = sVarDecls M.! v in
       PE.Var v .<- int lb
-  put S{sLocals = sLocals0, ..}
+  modify $ \S{..} -> S{sLocals = sLocals0, ..}
 
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
