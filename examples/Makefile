@@ -1,5 +1,5 @@
 output.pm: Main.hs
-	cabal -v0 run examples > examples.pm
+	cabal -v0 run examples -- -o output.pm
 
 .PHONY: clean cleandist
 
