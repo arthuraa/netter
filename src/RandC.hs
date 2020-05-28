@@ -104,6 +104,15 @@ newtype Prog a = Prog {runProg :: ContT () Builder a}
             MonadState S, MonadReader Options,
             MonadFresh, MonadCont)
 
+liftProg :: Builder () -> Prog ()
+liftProg = Prog . lift
+
+unliftProg :: Prog () -> Builder ()
+unliftProg (Prog p) = runContT p return
+
+reset :: Prog () -> Prog ()
+reset = liftProg . unliftProg
+
 instance MonadError Result Prog where
   throwError = Prog . lift . throwError
   catchError (Prog f) h =
@@ -297,8 +306,8 @@ block (Prog f) = Prog $ ContT $ \k -> do
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
-  comThen <- flushCom cThen
-  comElse <- flushCom cElse
+  comThen <- flushCom $ reset cThen
+  comElse <- flushCom $ reset cElse
   addCom $ Imp.Com [Imp.If e comThen comElse]
 
 -- | A chain of if statements.  The command
