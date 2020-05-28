@@ -53,7 +53,7 @@ module RandC (
   , (.+), (.-), (.*), (./), (.**)
   , min', max', log', div', mod', floor', ceil', round'
   , num
-  , (.!!)
+  , (.!!), (.!!!)
   -- * Comparison
   , (.<=), (.<), (.==), (./=)
   -- * Logical operations
@@ -255,17 +255,36 @@ parEval xs k1 = Prog $ ContT $ \k0 -> do
     return (x, c)
   k1 cs
 
+-- | Index into a list of expressions.
+--
+-- @
+-- [e0 .. en] .!! e == (e .== 0 .? e1 .: .. e .== int n .? en .: 0)
+-- @
+--
+-- Note that the result is zero if @e@ evaluates to an out-of-bounds index.
+
 infixl 9 .!!
 
--- | Index into a list using an expression.  This is compiled by testing if the
--- expression is equal to each possible index in the list, and thus quite
--- inefficient.
+(.!!) :: [Expr] -> Expr -> Expr
+xs .!! e =
+  foldr (\(i, x) acc -> (e .== int i) .? x .: acc) 0 $ zip [0 ..] xs
 
-(.!!) :: [a] -> Expr -> Prog a
-xs .!! e = do
+-- | Index into a list using an expression.  This is compiled using a series of
+-- if statements: we test if the expression equals each possible index, and run
+-- the continuation with the corresponding value at that index.  (*Warning*: if
+-- the expression does not equal anything, the continuation is discarded.)  This
+-- is quite inefficient in general, since it makes copies of the control-flow of
+-- the program for each element on the list.  Whenever possible, you should use
+-- the '.!!' operator instead, or limit the scope of the result with 'block'.
+
+infixl 9 .!!!
+
+(.!!!) :: [a] -> Expr -> Prog a
+xs .!!! e = do
   (x, _) <- parEval (zip xs [0..])
             $ \bs -> addCom $ Imp.switch [(e .== int i, c) | ((_, i), c) <- bs]
   return x
+
 
 -- | Evaluate an expression so that it can be used as an integer inside of
 -- Haskell.  We cannot know in advance what value the expression will take, so
@@ -292,16 +311,15 @@ eval e = do
 -- model.
 
 block :: Prog () -> Prog ()
-block (Prog f) = Prog $ ContT $ \k -> do
+block b = reset $ do
   S{sLocals = sLocals0, ..} <- get
   put S{sLocals = S.empty, ..}
-  runContT f return
+  b
   S{sLocals = sLocals1, ..} <- get
   forM_ (S.toList sLocals1) $ \v ->
     let (lb, _) = sVarDecls M.! v in
       addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
   modify $ \S{..} -> S{sLocals = sLocals0, ..}
-  k ()
 
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
