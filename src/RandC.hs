@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {-|
 
@@ -80,7 +81,9 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
+import Data.Maybe (isJust, fromJust)
 import Data.Text hiding (length, foldr, zip)
+import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -91,11 +94,13 @@ import qualified Data.Set as S
 
 type Expr = PE.Expr
 
-data S = S { sVarDecls :: M.Map Var (Int, Int)
-           , sLocals   :: Set Var
-           , sFormulas :: M.Map Var Expr
-           , sRewards  :: M.Map Text Expr
-           , sComs     :: [Imp.Com] }
+data S = S { _sVarDecls :: M.Map Var (Int, Int)
+           , _sLocals   :: Set Var
+           , _sFormulas :: M.Map Var Expr
+           , _sRewards  :: M.Map Text Expr
+           , _sComs     :: [Imp.Com] }
+
+makeLenses ''S
 
 type Builder = StateT S Pass
 
@@ -152,24 +157,30 @@ namedVar x lb ub = do
 
   v <- fresh x
 
-  modify $ \S{..} -> S{sVarDecls = M.insert v (lb, ub) sVarDecls,
-                       sLocals   = S.insert v sLocals, ..}
+  sVarDecls.at v ?= (lb, ub)
+  sLocals  .at v ?= ()
 
   return $ PE.Var v
+
+ensureVar :: Expr -> Prog Var
+ensureVar (PE.Var v) = do
+  varDeclared <- use $ sVarDecls.at v.to isJust
+
+  unless varDeclared $ do
+    throwError $ Error $ "Attempt to assign to an undeclared variable " ++ show v
+
+  return v
+
+ensureVar e =
+  throwError $ Error $ "Attempt to assign to non-variable " ++ show e
 
 -- | @v .<- e@ assigns the value of @e@ to the variable @v@.  If @v@ is some
 -- expression other than a variable, the compiler throws an error.
 infix 1 .<-
 (.<-) :: Expr -> Expr -> Prog ()
-PE.Var v .<- rhs = do
-  S{..} <- get
-
-  when (not $ M.member v sVarDecls) $ do
-    throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
-
-  put $ S{sComs = Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] : sComs, ..}
-
-e .<- _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
+e .<- rhs = do
+  v <- ensureVar e
+  sComs %= (Imp.Com [Imp.Assn (M.singleton v (return $ return rhs))] :)
 
 -- | Return a uniform distribution over the values given by the expressions.
 -- For example, the snippet @x .<-$ unif [1, 2, 3]@ assigns one of @1@, @2@ or
@@ -184,15 +195,9 @@ unif es = [(p, e) | e <- es]
 -- @0.3@, and to @1@ with probability @0.7@.  The probabilities must sum to one.
 infix 1 .<-$
 (.<-$) :: Expr -> [(Double, Expr)] -> Prog ()
-PE.Var v .<-$ rhs = do
-  S{..} <- get
-
-  when (not $ M.member v sVarDecls) $ do
-    throwError $ Error $ "Attempt to assign to a non-variable " ++ show v
-
-  put $ S{sComs = Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] : sComs, ..}
-
-e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show e
+e .<-$ rhs = do
+  v <- ensureVar e
+  sComs %= (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] :)
 
 -- | @formula f e@ creates a formula @f@ in the Prism model that evaluates to
 -- @e@.  Note that the value of a formula is computed where it is used, not
@@ -210,9 +215,7 @@ e .<-$ _rhs = throwError $ Error $ "Attempt to assign to non-variable " ++ show 
 formula :: Text -> Expr -> Prog Expr
 formula x e = do
   v <- fresh x
-
-  modify $ \S{..} -> S{sFormulas = M.insert v e sFormulas, ..}
-
+  sFormulas.at v ?= e
   return $ PE.Var v
 
 -- | @rewards x e@ declares @x@ as a new reward.  Prism can check various
@@ -221,12 +224,10 @@ formula x e = do
 rewards :: String -> Expr -> Prog ()
 rewards x e = do
   let x' = pack x
-
-  S{..} <- get
-
-  case M.lookup x' sRewards of
-    Just _  -> throwError $ Error $ "Redefining reward " ++ unpack x'
-    Nothing -> put S{sRewards = M.insert x' e sRewards, ..}
+  redefining <- use $ sRewards.at x'.to isJust
+  when redefining $ do
+    throwError $ Error $ "Redefining reward " ++ unpack x'
+  sRewards.at x' ?= e
 
 infix 1 .?
 (.?) :: Expr -> Expr -> Expr -> Expr
@@ -238,15 +239,15 @@ infix 0 .:
 
 flushCom :: MonadState S m => m () -> m Imp.Com
 flushCom f = do
-  S{sComs = coms0, ..} <- get
-  put S{sComs = [], ..}
+  coms0 <- use sComs
+  sComs .= []
   f
-  S{sComs = coms1, ..} <- get
-  put S{sComs = coms0, ..}
+  coms1 <- use sComs
+  sComs .= coms0
   return $ Imp.revSeq coms1
 
 addCom :: MonadState S m => Imp.Com -> m ()
-addCom c = modify $ \S{..} -> S{sComs = c : sComs, ..}
+addCom c = sComs %= (c :)
 
 parEval :: [a] -> ([(a, Imp.Com)] -> Builder ()) -> Prog a
 parEval xs k1 = Prog $ ContT $ \k0 -> do
@@ -294,8 +295,8 @@ xs .!!! e = do
 
 eval :: Expr -> Prog Int
 eval e@(PE.Var v) = do
-  S{..} <- get
-  case M.lookup v sVarDecls of
+  bounds <- use $ sVarDecls.at v
+  case bounds of
     Just (lb, ub) ->
       parEval [lb .. ub]
       $ \bs -> addCom $ Imp.switch [(e .== int i, c) | (i, c) <- bs]
@@ -312,14 +313,14 @@ eval e = do
 
 block :: Prog () -> Prog ()
 block b = reset $ do
-  S{sLocals = sLocals0, ..} <- get
-  put S{sLocals = S.empty, ..}
+  locals0 <- use sLocals
+  sLocals .= S.empty
   b
-  S{sLocals = sLocals1, ..} <- get
-  forM_ (S.toList sLocals1) $ \v ->
-    let (lb, _) = sVarDecls M.! v in
-      addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
-  modify $ \S{..} -> S{sLocals = sLocals0, ..}
+  locals1 <- use sLocals
+  forM_ (S.toList locals1) $ \v -> do
+    (lb, _) <- use $ sVarDecls.at v.to fromJust
+    addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
+  sLocals .= locals0
 
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()

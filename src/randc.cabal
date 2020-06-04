@@ -88,7 +88,8 @@ library
                        hashcons >= 0.1.0,
                        mtl >= 2.2.2,
                        prettyprinter >=1.6,
-                       text >= 1.2.3.1
+                       text >= 1.2.3.1,
+                       lens >= 4.19
   
   -- Directories containing source files.
   hs-source-dirs:      .
