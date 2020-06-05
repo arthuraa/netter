@@ -81,7 +81,7 @@ import qualified RandC.Prism.Expr as PE
 import qualified RandC.Imp as Imp
 import qualified RandC.Compiler as Compiler
 
-import Data.Maybe (isJust, fromJust)
+
 import Data.Text hiding (length, foldr, zip)
 import Control.Lens
 import Control.Monad.Except
@@ -164,7 +164,7 @@ namedVar x lb ub = do
 
 ensureVar :: Expr -> Prog Var
 ensureVar (PE.Var v) = do
-  varDeclared <- use $ sVarDecls.at v.to isJust
+  varDeclared <- uses sVarDecls (M.member v)
 
   unless varDeclared $ do
     throwError $ Error $ "Attempt to assign to an undeclared variable " ++ show v
@@ -223,11 +223,10 @@ formula x e = do
 -- etc.
 rewards :: String -> Expr -> Prog ()
 rewards x e = do
-  let x' = pack x
-  redefining <- use $ sRewards.at x'.to isJust
+  redefining <- uses sRewards $ M.member $ pack x
   when redefining $ do
-    throwError $ Error $ "Redefining reward " ++ unpack x'
-  sRewards.at x' ?= e
+    throwError $ Error $ "Redefining reward " ++ x
+  sRewards.at (pack x) ?= e
 
 infix 1 .?
 (.?) :: Expr -> Expr -> Expr -> Expr
@@ -318,7 +317,7 @@ block b = reset $ do
   b
   locals1 <- use sLocals
   forM_ (S.toList locals1) $ \v -> do
-    (lb, _) <- use $ sVarDecls.at v.to fromJust
+    (lb, _) <- uses sVarDecls (M.! v)
     addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
   sLocals .= locals0
 
