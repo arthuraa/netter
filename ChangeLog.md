@@ -13,3 +13,7 @@
 * List indexing
 
 * ... many other features.
+
+## 0.1.2.0 -- 2020-06-05
+
+* Generalize indexing operations to arbitrary functors keyed by integer

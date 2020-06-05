@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs #-}
 
 {-|
 
@@ -91,6 +92,7 @@ import Control.Monad.Cont
 import qualified Data.Map.Strict as M
 import Data.Set (Set)
 import qualified Data.Set as S
+import Data.Key hiding (zip)
 
 type Expr = PE.Expr
 
@@ -265,9 +267,9 @@ parEval xs k1 = Prog $ ContT $ \k0 -> do
 
 infixl 9 .!!
 
-(.!!) :: [Expr] -> Expr -> Expr
+(.!!) :: (Key m ~ Int, FoldableWithKey m) => m Expr -> Expr -> Expr
 xs .!! e =
-  foldr (\(i, x) acc -> (e .== int i) .? x .: acc) 0 $ zip [0 ..] xs
+  foldrWithKey (\i x acc -> (e .== int i) .? x .: acc) 0 xs
 
 -- | Index into a list using an expression.  This is compiled using a series of
 -- if statements: we test if the expression equals each possible index, and run
@@ -279,10 +281,10 @@ xs .!! e =
 
 infixl 9 .!!!
 
-(.!!!) :: [a] -> Expr -> Prog a
+(.!!!) :: (Key m ~ Int, FoldableWithKey m) => m a -> Expr -> Prog a
 xs .!!! e = do
-  (x, _) <- parEval (zip xs [0..])
-            $ \bs -> addCom $ Imp.switch [(e .== int i, c) | ((_, i), c) <- bs]
+  (_, x) <- parEval (toKeyedList xs)
+            $ \bs -> addCom $ Imp.switch [(e .== int i, c) | ((i, _), c) <- bs]
   return x
 
 

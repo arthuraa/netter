@@ -10,7 +10,7 @@ name:                randc
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.1.1.0
+version:             0.1.2.0
 
 -- A short (one-line) description of the package.
 -- synopsis:            
@@ -89,6 +89,7 @@ library
                        mtl >= 2.2.2,
                        prettyprinter >=1.6,
                        text >= 1.2.3.1,
+                       keys >= 3.12,
                        lens >= 4.19
   
   -- Directories containing source files.
