@@ -57,7 +57,7 @@ module RandC (
   , num
   , (.!!), (.!!!)
   -- * Comparison
-  , (.<=), (.<), (.==), (./=)
+  , (.<=), (.>=), (.<), (.>), (.==), (./=)
   -- * Logical operations
   , bool
   , (.&&), (.||)
@@ -84,7 +84,7 @@ import qualified RandC.Compiler as Compiler
 
 
 import Data.Text hiding (length, foldr, zip)
-import Control.Lens
+import Control.Lens hiding ((.>))
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -432,10 +432,18 @@ infix 4 .<=
 (.<=) :: Expr -> Expr -> Expr
 (.<=) = PE.BinOp PE.Leq
 
+infix 4 .>=
+(.>=) :: Expr -> Expr -> Expr
+(.>=) = flip (.<=)
+
 -- | Compare numbers for strict ordering.
 infix 4 .<
 (.<) :: Expr -> Expr -> Expr
 (.<) = PE.BinOp PE.Lt
+
+infix 4 .>
+(.>) :: Expr -> Expr -> Expr
+(.>) = flip (.<)
 
 -- | Similar to 'compile', but reads the options from its first argument rather
 -- than from the command line.
