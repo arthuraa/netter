@@ -52,6 +52,7 @@ mergeInstr deps (If e c1 c2) =
       ([Assn assn1], [Assn assn2]) ->
         Assn (condAssn e assn1 assn2)
       (_, _) -> If e c1' c2'
+mergeInstr deps (Block vs c) = Block vs (mergeCom deps c)
 
 mergeInstrs :: StateDeps -> [Instr] -> [Instr]
 mergeInstrs deps is = go is
@@ -93,12 +94,15 @@ simplifyInstrs (i : is) =
       else case e of
         Const (Bool b) -> instrs (if b then cThen else cElse) ++ is'
         _ -> i' : is'
+    (i'@(Block vs c), is') ->
+      if S.null vs then instrs c ++ is' else i' : is'
 
 simplifyInstr :: Instr -> Instr
 simplifyInstr (Assn assns) =
   Assn (M.map (G.simplify . fmap (fmap PE.simplify)) assns)
 simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
+simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program

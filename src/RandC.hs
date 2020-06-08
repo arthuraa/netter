@@ -313,21 +313,19 @@ eval e = do
 -- model.
 
 block :: Prog () -> Prog ()
-block b = reset $ do
+block b = do
   locals0 <- use sLocals
   sLocals .= S.empty
-  b
+  c <- flushCom $ reset b
   locals1 <- use sLocals
-  forM_ (S.toList locals1) $ \v -> do
-    (lb, _) <- uses sVarDecls (M.! v)
-    addCom (Imp.Com [Imp.Assn $ M.singleton v $ return $ return $ int lb])
+  addCom (Imp.Com [Imp.Block locals1 c])
   sLocals .= locals0
 
 -- | If statement
 if' :: Expr -> Prog () -> Prog () -> Prog ()
 if' e cThen cElse = do
-  comThen <- flushCom $ reset cThen
-  comElse <- flushCom $ reset cElse
+  comThen <- flushCom $ block cThen
+  comElse <- flushCom $ block cElse
   addCom $ Imp.Com [Imp.If e comThen comElse]
 
 -- | A chain of if statements.  The command

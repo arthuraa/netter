@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module RandC.Imp where
 
@@ -11,6 +12,8 @@ import RandC.Prob hiding (Choice)
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc hiding (cat)
 import qualified Data.Map.Strict as M
+import Data.Set (Set)
+import qualified Data.Set as S
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
                        , pDefs :: M.Map Var Expr
@@ -20,6 +23,7 @@ data Program = Program { pVarDecls :: M.Map Var (Int, Int)
 
 data Instr = Assn (M.Map Var (G (P Expr)))
            | If Expr Com Com
+           | Block (Set Var) Com
   deriving (Eq, Show)
 
 newtype Com = Com { instrs :: [Instr] }
@@ -36,25 +40,30 @@ revSeq cs = foldl cat skip $ reverse cs
 
 instance Pretty Instr where
   pretty (Assn assns) =
-    vcat [ pretty "assn"
-         , vcat [ sep [ pretty v, pretty ".<-", pretty e ]
+    vcat [ "assn"
+         , vcat [ sep [ pretty v, ".<-", pretty e ]
                 | (v, e) <- M.assocs assns ] ]
   pretty (If e c1 c2) =
-    vcat [ sep [ pretty "if", pretty e, pretty "then" ]
+    vcat [ sep [ "if", pretty e, "then" ]
          , indent 2 (pretty c1)
-         , pretty "else"
+         , "else"
          , indent 2 (pretty c2)
-         , pretty "fi" ]
+         , "fi" ]
+  pretty (Block vs c) =
+    vcat [ "block"
+         , indent 2 $ sep [pretty v | v <- S.toList vs]
+         , indent 2 $ pretty c
+         , "end" ]
 
 instance Pretty Com where
-  pretty (Com is) = vcat [ pretty i <> pretty ";" | i <- is ]
+  pretty (Com is) = vcat [ pretty i <> ";" | i <- is ]
 
 instance Pretty Program where
   pretty Program{..} =
     vcat [ declarations pVarDecls
-         , vcat [ sep [ pretty "def", pretty v, pretty "=", pretty e, pretty ";" ]
+         , vcat [ sep [ "def", pretty v, "=", pretty e, ";" ]
                 | (v, e) <- M.assocs pDefs ]
-         , vcat [ sep [ pretty "reward", pretty v, pretty "=", pretty e, pretty ";" ]
+         , vcat [ sep [ "reward", pretty v, "=", pretty e, ";" ]
                 | (v, e) <- M.assocs pRewards ]
          , pretty pCom ]
 
