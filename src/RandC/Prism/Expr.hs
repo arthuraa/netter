@@ -248,13 +248,12 @@ simplify (If e eThen eElse) = let e'     = simplify e
                                   Const (Bool False) -> eElse'
                                   _ -> If e' eThen' eElse'
 
--- | Compute all of the variables that appear on an expression.
-vars :: Expr -> S.Set Var
-vars (Var v)            = S.singleton v
-vars (Const _)          = S.empty
-vars (UnOp _ e)         = vars e
-vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
-vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
+instance HasVars Expr where
+  vars (Var v)            = S.singleton v
+  vars (Const _)          = S.empty
+  vars (UnOp _ e)         = vars e
+  vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
+  vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
 
 counts :: Expr -> M.Map Var Int
 counts (Var v)            = M.singleton v 1

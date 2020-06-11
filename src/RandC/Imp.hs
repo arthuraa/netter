@@ -4,6 +4,7 @@
 module RandC.Imp where
 
 import RandC.Var
+import RandC.Dependencies
 import RandC.Formatting
 import RandC.Prism.Expr hiding (If)
 import RandC.G hiding (If)
@@ -80,3 +81,13 @@ instance ModVars Instr where
   modVars (Assn assn)        = M.keysSet assn
   modVars (If _ cThen cElse) = modVars cThen `S.union` modVars cElse
   modVars (Block vs c)       = modVars c S.\\ vs
+
+instance HasStateDeps Com where
+  stateDeps deps (Com is) = stateDeps deps is
+
+instance HasStateDeps Instr where
+  stateDeps deps (Assn assn) =
+    S.unions $ fmap (stateDeps deps) assn
+  stateDeps deps (If e cThen cElse) =
+    S.unions [stateDeps deps e, stateDeps deps cThen, stateDeps deps cElse]
+  stateDeps deps (Block _ c) = stateDeps deps c

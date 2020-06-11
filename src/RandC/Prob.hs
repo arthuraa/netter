@@ -2,6 +2,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 module RandC.Prob where
 
+import RandC.Var
+
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -84,6 +86,9 @@ instance Pretty a => Pretty (P a) where
   pretty (P probs) =
     cat $ punctuate (pretty " + ") [ pretty p <> pretty " : " <> pretty x
                                    | (p, x) <- probs ]
+
+instance HasVars a => HasVars (P a) where
+  vars p = S.unions $ fmap vars p
 
 addVal :: Valuation -> Die -> Int -> Valuation
 addVal val d i d'

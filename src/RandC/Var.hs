@@ -6,17 +6,19 @@
 {-# LANGUAGE UndecidableInstances #-}
 module RandC.Var
   (Var,
-   Vars,
+   VarGenS,
    VarGen,
    VarGenT(..),
    MonadFresh,
    name,
    runVarGenT,
-   novars,
+   varGenInit,
    fresh,
    (|+|),
    Renaming,
-   rename) where
+   rename,
+   HasVars,
+   vars) where
 
 import GHC.Generics
 import Data.HashCons
@@ -44,19 +46,19 @@ instance Pretty Var where
   pretty (Var v) = pretty x <> pretty "_" <> pretty n
     where Var' x n = getVal v
 
-type Vars = M.Map Text Int
+type VarGenS = M.Map Text Int
 
 name :: Var -> Text
 name (Var v) = x
   where Var' x _ = getVal v
 
-novars :: Vars
-novars = M.empty
+varGenInit :: VarGenS
+varGenInit = M.empty
 
-newtype VarGenT m a = VarGenT (StateT Vars m a)
+newtype VarGenT m a = VarGenT (StateT VarGenS m a)
   deriving (Applicative,Functor,Monad)
 
-runVarGenT :: Monad m => VarGenT m a -> Vars -> m (a, Vars)
+runVarGenT :: Monad m => VarGenT m a -> VarGenS -> m (a, VarGenS)
 runVarGenT (VarGenT f) vs = runStateT f vs
 
 type VarGen a = VarGenT Identity a
@@ -104,3 +106,9 @@ type Renaming = M.Map Var Var
 
 rename :: Renaming -> Var -> Var
 rename ren v = M.findWithDefault v v ren
+
+class HasVars a where
+  vars :: a -> S.Set Var
+
+instance HasVars Var where
+  vars = S.singleton

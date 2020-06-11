@@ -68,7 +68,7 @@ mergeInstrs deps is = go is
             (i@(Assn assn), i'@(Assn assn') : is') ->
               let assnVars  = M.keysSet assn
                   assnVars' = M.keysSet assn'
-                  assnDeps' = S.unions $ fmap (guardedExprStateDeps deps) assn' in
+                  assnDeps' = S.unions $ fmap (stateDeps deps) assn' in
                 if S.disjoint assnVars assnDeps' &&
                    S.disjoint assnVars assnVars' then
                   Assn (M.union assn assn') : is'

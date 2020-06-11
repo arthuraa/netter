@@ -33,7 +33,7 @@ compileInstrs _ _ [] next =
   return next
 compileInstrs deps varDecls (Src.Assn assn : is) next = do
   cNext <- compileInstrs deps varDecls is next
-  let cNextDeps = guardedStateDeps deps (\_ _ -> S.empty) cNext
+  let cNextDeps = stateDeps deps cNext
   -- If the next PC value depends on a variable that is updated by the
   -- assignment, we have to create a dummy block for the conditional.
   if S.disjoint (M.keysSet assn) cNextDeps then do

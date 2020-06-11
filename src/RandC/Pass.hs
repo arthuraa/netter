@@ -28,7 +28,7 @@ ensureTarget curTgt res = do
 
 runPass :: Options -> Pass a -> Either Result a
 runPass opts (Pass f) =
-  fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) novars
+  fst $ runIdentity $ runVarGenT (runReaderT (runExceptT f) opts) varGenInit
 
 doOutput :: Maybe String -> String -> IO ()
 doOutput Nothing  res = putStrLn res

@@ -4,7 +4,6 @@ import RandC.Var
 import RandC.Prob       hiding (resolve)
 import qualified RandC.G as G
 import RandC.G          hiding (If, simplify)
-import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
 
 import qualified Data.Set        as S
@@ -23,7 +22,7 @@ assnDeps :: M.Map Var (P Expr) -- ^ Assignment of probabistic expressions to var
 assnDeps assn =
   foldl addVarDeps S.empty assn
   where addVarDeps allDeps es = foldl addExprDeps allDeps es
-        addExprDeps allDeps e = S.union allDeps (PE.vars e)
+        addExprDeps allDeps e = S.union allDeps (vars e)
 
 -- | This dependency map, computed by @definitionStateDeps@ below, maps each
 -- local definition to the set of state variables it depends on
@@ -31,7 +30,7 @@ type StateDeps = M.Map Var (S.Set Var)
 
 definitionStateDeps :: M.Map Var Expr -> StateDeps
 definitionStateDeps defs = foldl updateDependencies M.empty $ M.keysSet defs
-  where directDepMap = M.map PE.vars defs
+  where directDepMap = M.map vars defs
         updateDependencies deps v
           | M.member v deps =
             -- The variable v has already been visited, so we can skip it
@@ -47,25 +46,30 @@ definitionStateDeps defs = foldl updateDependencies M.empty $ M.keysSet defs
                                | v' <- S.toList directDeps ] in
               M.insert v allDeps deps'
 
+class HasStateDeps a where
+  stateDeps :: StateDeps -> a -> S.Set Var
+
 -- | Lookup the dependencies of a variable.  If a variable does not appear on
 -- the dependency map, it is supposed to be part of the program state instead of
 -- a local definition.  In this case, the variable depends only on itself.
-varStateDeps :: StateDeps -> Var -> S.Set Var
-varStateDeps deps v = M.findWithDefault (S.singleton v) v deps
+instance HasStateDeps Var where
+  stateDeps deps v = M.findWithDefault (S.singleton v) v deps
 
-exprStateDeps :: StateDeps -> Expr -> S.Set Var
-exprStateDeps deps e =
-  S.unions [varStateDeps deps v | v <- S.toList $ PE.vars e]
+instance HasStateDeps Expr where
+  stateDeps deps e =
+    S.unions [stateDeps deps v | v <- S.toList $ vars e]
 
-probExprStateDeps :: StateDeps -> P Expr -> S.Set Var
-probExprStateDeps deps e = S.unions $ fmap (exprStateDeps deps) e
+instance HasStateDeps a => HasStateDeps (P a) where
+  stateDeps deps e = S.unions $ fmap (stateDeps deps) e
 
-guardedStateDeps :: StateDeps -> (StateDeps -> a -> S.Set Var) -> G a -> S.Set Var
-guardedStateDeps deps f e =
-  let innerStateDeps  = S.unions $ fmap (f deps) e
-      branchDeps      = G.vars (const S.empty) e
-      branchStateDeps = S.unions $ S.map (varStateDeps deps) branchDeps in
-    innerStateDeps `S.union` branchStateDeps
+instance HasStateDeps a => HasStateDeps (G a) where
+  stateDeps deps (G.Return x) =
+    stateDeps deps x
+  stateDeps deps (G.If e x1 x2) =
+    S.unions [stateDeps deps e, stateDeps deps x1, stateDeps deps x2]
 
-guardedExprStateDeps :: StateDeps -> G (P Expr) -> S.Set Var
-guardedExprStateDeps deps e = guardedStateDeps deps probExprStateDeps e
+instance HasStateDeps a => HasStateDeps [a] where
+  stateDeps deps xs = S.unions $ map (stateDeps deps) xs
+
+instance HasStateDeps Int where
+  stateDeps _ _ = S.empty
