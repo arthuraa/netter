@@ -17,6 +17,7 @@ import qualified RandC.Options as O
 import Control.Lens hiding (Const)
 import Control.Monad.State
 import Control.Monad.Reader
+import Data.Set (Set)
 import qualified Data.Set        as S
 import qualified Data.Map.Strict as M
 import Data.Map.Strict (Map)
@@ -185,6 +186,45 @@ inlineInstr (Block vs c) = do
   if S.null vs then return $ instrs c'
   else return [Block vs c']
 
+class NeedsVar a where
+  needsVar :: StateDeps -> Set Var -> a -> Set Var
+
+instance NeedsVar Com where
+  needsVar depMap vs (Com is) =
+    foldr (\i vs -> needsVar depMap vs i) vs is
+
+instance NeedsVar Instr where
+  needsVar depMap vs (Assn assn) =
+    let assn' = M.filterWithKey (\v _ -> v `S.member` vs) assn in
+      S.union vs (S.unions $ fmap (stateDeps depMap) assn')
+  needsVar depMap vs (If e cThen cElse) =
+    let vsThen = needsVar depMap vs cThen
+        vsElse = needsVar depMap vs cElse in
+      S.unions [stateDeps depMap e, vsThen, vsElse]
+  needsVar depMap vs (Block _ c) = needsVar depMap vs c
+
+class FilterVars a where
+  filterVars :: Set Var -> a -> a
+
+instance FilterVars Com where
+  filterVars vs (Com is) = Com [filterVars vs i | i <- is]
+
+instance FilterVars Instr where
+  filterVars vs (Assn assn) =
+    Assn $ M.filterWithKey (\v _ -> v `S.member` vs) assn
+  filterVars vs (If e cThen cElse) = If e (filterVars vs cThen) (filterVars vs cElse)
+  filterVars vs (Block vs' c) = Block (S.intersection vs vs') (filterVars vs c)
+
+trim :: Program -> Program
+trim Program{..} =
+  let depMap     = definitionStateDeps pDefs
+      keep0      = S.unions $ fmap (stateDeps depMap) pRewards
+      keep1      = needsVar depMap keep0 pCom
+      pVarDecls' = M.filterWithKey (\v _ -> v `S.member` keep1) pVarDecls
+      pDefs'     = M.filter (\e -> stateDeps depMap e `S.isSubsetOf` keep1) pDefs
+      pCom'      = filterVars keep1 pCom in
+    Program pVarDecls' pDefs' pRewards pCom'
+
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program
 maybeOptimize opt f prog = do
@@ -195,4 +235,5 @@ optimize :: Program -> Pass Program
 optimize =
   maybeOptimize O.merge    (return . merge)    >=>
   maybeOptimize O.simplify (return . simplify) >=>
-  maybeOptimize O.inlining inline
+  maybeOptimize O.inlining inline              >=>
+  maybeOptimize O.trimming (return . trim)
