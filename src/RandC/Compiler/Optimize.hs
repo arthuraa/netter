@@ -1,3 +1,6 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module RandC.Compiler.Optimize where
 
 import RandC.Var
@@ -11,9 +14,12 @@ import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
 import qualified RandC.Options as O
 
+import Control.Lens hiding (Const)
+import Control.Monad.State
 import Control.Monad.Reader
 import qualified Data.Set        as S
 import qualified Data.Map.Strict as M
+import Data.Map.Strict (Map)
 
 -- * Minimizing the control-flow graph
 
@@ -104,6 +110,81 @@ simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
+data IS = IS { _locals   :: Map Var Expr
+             , _renaming :: Map Var Var }
+  deriving (Eq, Ord, Show)
+
+makeLenses ''IS
+
+type I a = StateT IS Pass a
+
+inline :: Program -> Pass Program
+inline Program{..} =
+  if M.null pDefs then do
+    (pCom', IS pDefs' ren) <- runStateT (inlineCom pCom) (IS M.empty M.empty)
+    let pRewards' = fmap (subst (Var . rename ren)) pRewards
+    return Program{pDefs = pDefs', pRewards = pRewards', pCom = pCom', ..}
+  else error "Inlining does not work with local definitions"
+
+inlineCom :: Com -> I Com
+inlineCom (Com is) = Com <$> inlineInstrs is
+
+inlineInstrs :: [Instr] -> I [Instr]
+inlineInstrs [] = return []
+inlineInstrs (i : is) = do
+  is1 <- inlineInstr  i
+  is2 <- inlineInstrs is
+  return $ is1 ++ is2
+
+substG :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
+substG f x = go x
+  where go (G.Return x) = G.Return <$> traverse (substM f) x
+        go (G.If e x y) = G.If <$> substM f e <*> go x <*> go y
+
+inlineInstr :: Instr -> I [Instr]
+inlineInstr (Assn assn) = do
+  ren   <- use renaming
+  renaming .= M.empty
+  assn' <- flip M.traverseMaybeWithKey assn $ \lhs rhs -> do
+    -- Check if the right-hand side is deterministic
+    case traversed ofP rhs of
+      Just rhs -> do
+        -- If so, turn the binding into a formula
+        lhs' <- fresh $ name lhs
+        let rhs' = subst (Var . rename ren) (toExpr rhs)
+        locals  .at lhs' ?= rhs'
+        renaming.at lhs  ?= lhs'
+        return Nothing
+      Nothing -> do
+        -- Otherwise, just rename the formula
+        Just <$> substG (return . Var . rename ren) rhs
+
+  ren' <- use renaming
+  renaming .= (ren' `M.union` ren) `M.withoutKeys` (M.keysSet assn')
+  if M.null assn' then return [] else return [Assn assn']
+
+inlineInstr (If e cThen cElse) = do
+  ren0     <- use renaming
+  cThen'   <- inlineCom cThen
+  renThen  <- use renaming
+  renaming .= ren0
+  cElse'   <- inlineCom cElse
+  renElse  <- use renaming
+  renaming .= ren0
+  if cThen' == skip && cElse' == skip then do
+    let merge v = PE.If e (Var $ rename renThen v) (Var $ rename renElse v)
+    let renamed = M.keysSet renThen `S.union` M.keysSet renElse
+    inlineInstr $ Assn $ M.fromSet (return . return . merge) renamed
+  else do
+    let flushVars c ren = cat c $ Com [Assn $ M.map (return . return . Var) ren]
+    let e' = subst (Var . rename ren0) e
+    return [If e' (flushVars cThen' renThen) (flushVars cElse' renElse)]
+
+inlineInstr (Block vs c) = do
+  c' <- inlineCom c
+  if S.null vs then return $ instrs c'
+  else return [Block vs c']
+
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program
 maybeOptimize opt f prog = do
@@ -112,5 +193,6 @@ maybeOptimize opt f prog = do
 
 optimize :: Program -> Pass Program
 optimize =
-  maybeOptimize O.merge (return . merge) >=>
-  maybeOptimize O.simplify (return . simplify)
+  maybeOptimize O.merge    (return . merge)    >=>
+  maybeOptimize O.simplify (return . simplify) >=>
+  maybeOptimize O.inlining inline

@@ -14,7 +14,9 @@ module RandC.Var
    runVarGenT,
    novars,
    fresh,
-   (|+|)) where
+   (|+|),
+   Renaming,
+   rename) where
 
 import GHC.Generics
 import Data.HashCons
@@ -97,3 +99,8 @@ cs1 |+| cs2 =
   let vs       = M.keysSet cs1 `S.union` M.keysSet cs2
       val cs v = M.findWithDefault 0 v cs in
   M.fromSet (\v -> val cs1 v + val cs2 v) vs
+
+type Renaming = M.Map Var Var
+
+rename :: Renaming -> Var -> Var
+rename ren v = M.findWithDefault v v ren

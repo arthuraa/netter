@@ -69,3 +69,14 @@ instance Pretty Program where
 
 switch :: [(Expr, Com)] -> Com
 switch = foldr (\(e, branch) acc -> Com [If e branch acc]) skip
+
+class ModVars a where
+  modVars :: a -> Set Var
+
+instance ModVars Com where
+  modVars (Com is) = S.unions [modVars i | i <- is]
+
+instance ModVars Instr where
+  modVars (Assn assn)        = M.keysSet assn
+  modVars (If _ cThen cElse) = modVars cThen `S.union` modVars cElse
+  modVars (Block vs c)       = modVars c S.\\ vs

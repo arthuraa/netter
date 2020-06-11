@@ -46,7 +46,6 @@ module RandC (
   -- * Variables, formulas and rewards
   , namedVar
   , var
-  , formula
   , rewards
   -- * Expressions
   , int
@@ -98,7 +97,6 @@ type Expr = PE.Expr
 
 data S = S { _sVarDecls :: M.Map Var (Int, Int)
            , _sLocals   :: Set Var
-           , _sFormulas :: M.Map Var Expr
            , _sRewards  :: M.Map Text Expr
            , _sComs     :: [Imp.Com] }
 
@@ -200,25 +198,6 @@ infix 1 .<-$
 e .<-$ rhs = do
   v <- ensureVar e
   sComs %= (Imp.Com [Imp.Assn (M.singleton v (return $ P rhs))] :)
-
--- | @formula f e@ creates a formula @f@ in the Prism model that evaluates to
--- @e@.  Note that the value of a formula is computed where it is used, not
--- where it is defined.  For example, in the following program, the final value
--- of @y@ is @1@, not @0@.
---
--- @
--- x  <- var 0 10
--- y  <- var 0 10
--- x .<- 0
--- f  <- formula "f" x
--- x .<- 1
--- y  <- f
--- @
-formula :: Text -> Expr -> Prog Expr
-formula x e = do
-  v <- fresh x
-  sFormulas.at v ?= e
-  return $ PE.Var v
 
 -- | @rewards x e@ declares @x@ as a new reward.  Prism can check various
 -- properties of rewards; e.g. their average stationary value, maximum, minimum,
@@ -448,8 +427,8 @@ infix 4 .>
 compileWith :: Options -> Prog () -> IO ()
 compileWith opts (Prog prog) = doPass opts $ do
   let prog' = runContT prog $ \_ -> return ()
-  ((), S decls _locals defs rews coms) <- runStateT prog' $ S M.empty S.empty M.empty M.empty []
-  Compiler.compile (Imp.Program decls defs rews (Imp.revSeq coms))
+  ((), S decls _locals rews coms) <- runStateT prog' $ S M.empty S.empty M.empty []
+  Compiler.compile (Imp.Program decls M.empty rews (Imp.revSeq coms))
 
 -- | Compile a program to Prism code, printing the result on standard output.
 -- The behavior of the compiler can be tweaked by command-line options
