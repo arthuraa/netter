@@ -1,4 +1,5 @@
 -Q . RandC
+-arg "-W -notation-overridden,-ambiguous-paths"
 
 Expr.v
 Prob.v

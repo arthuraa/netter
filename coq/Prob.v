@@ -112,6 +112,7 @@ apply/(iffP idP); case: (val d x)=> // [[/= r rP] e].
 by rewrite e in rP.
 Qed.
 
+Arguments suppPn {d x}.
 
 Definition mass d := \sum_(x <- supp d) d x.
 
@@ -220,8 +221,53 @@ apply/eq_fset=> x'.
 by rewrite mem_supp in_fset1 diracE; case: eq_op.
 Qed.
 
+Lemma supp_diracP x x' : reflect (x' = x) (x' \in supp (dirac x)).
+Proof. rewrite supp_dirac; exact: fset1P. Qed.
+
 Lemma eq_prob (p1 p2 : {prob T}) : p1 =1 p2 <-> p1 = p2.
 Proof. by split=> [/eq_distr/val_inj|-> //]. Qed.
+
+Lemma in_eq_probL (p1 p2 : {prob T}) : {in supp p1, p1 =1 p2} -> p1 = p2.
+Proof.
+move=> e; apply/eq_prob=> x.
+case: (boolP (x \in supp p1))=> xP; first exact: e.
+rewrite (suppPn xP).
+have: \sum_(y <- supp p1) p2 y = 1.
+  rewrite -(eqP (valP p1)) /mass /= big_seq [RHS]big_seq.
+  by apply/eq_big=> // ? /e ->.
+rewrite -(eqP (valP p2)) /mass /= [RHS](bigID (mem (supp p1))) /=.
+rewrite -[in RHS]big_filter -val_fset_filter.
+have ->: fset_filter (mem (supp p1)) (supp p2) = supp p1.
+  apply/eq_fset=> y; rewrite in_fset_filter /=.
+  case: (boolP (y \in supp p1))=> //= y_p1.
+  by rewrite mem_supp -(e _ y_p1) -mem_supp.
+rewrite -[LHS]GRing.addr0 => /GRing.addrI/esym/eqP.
+rewrite Num.Theory.psumr_eq0; last by move=> ? _; rewrite distr_ge0.
+case: (boolP (x \in supp p2)) => x_p2; last by rewrite (suppPn x_p2).
+by move=> /allP/(_ _ x_p2); rewrite xP => /eqP ->.
+Qed.
+
+Lemma in_eq_projR (p1 p2 : {prob T}) : {in supp p2, p1 =1 p2} -> p1 = p2.
+Proof.
+by move=> e; apply/esym/in_eq_probL=> x x_p2; rewrite e.
+Qed.
+
+Definition of_dirac (p : {prob T}) : option T :=
+  if val (supp p) is [:: x] then Some x
+  else None.
+
+Lemma diracK : pcancel dirac of_dirac.
+Proof. by move=> x; rewrite /of_dirac supp_dirac /=. Qed.
+
+Lemma of_diracK : ocancel of_dirac dirac.
+Proof.
+rewrite /of_dirac => p.
+case e: (val (supp p))=> [//|x[|//]] /=.
+have {}e: supp p = fset1 x by rewrite fset1E -e fsvalK.
+move/eqP: (valP p); rewrite /mass e /= big_seq1 => p_x.
+apply/in_eq_projR=> y; rewrite e => /fset1P ->.
+by rewrite p_x diracE eqxx.
+Qed.
 
 End Prob.
 
@@ -287,14 +333,30 @@ apply/eq_fset=> x.
 by rewrite mem_suppN sample_defE0 sampleE.
 Qed.
 
+Lemma supp_sampleP y :
+  reflect (exists2 x, x \in supp p & y \in supp (f x)) (y \in supp sample).
+Proof.
+rewrite supp_sample; apply/(iffP bigcupP).
+- by case=> ????; eauto.
+- by case=> ???; eexists; eauto.
+Qed.
+
 End Sample.
+
+Declare Scope prob_scope.
+Local Open Scope prob_scope.
+
+Notation "'sample:' x '<-' t1 ';' t2" :=
+  (sample t1 (fun x => t2))
+  (at level 20, t1 at level 100, t2 at level 200,
+   right associativity, format "'[' 'sample:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2 ")
+  : prob_scope.
 
 Section SampleProps.
 
 Variables T S : ordType.
 
-Lemma sample_diracL (x : T) (f : T -> {prob S}) :
-  sample (dirac x) f = f x.
+Lemma sample_diracL (x : T) (f : T -> {prob S}) : sample (dirac x) f = f x.
 Proof.
 apply/eq_prob=> y; rewrite sampleE supp_dirac /= big_seq1.
 by rewrite mkprobE in_fset1 eqxx /dirac_def eqxx GRing.mul1r.
@@ -319,12 +381,19 @@ Qed.
 
 End SampleProps.
 
+Open Scope prob_scope.
+
 Fixpoint map_p T (S : ordType) (f : T -> {prob S}) (xs : seq T) : {prob seq S} :=
   match xs with
   | [::] => dirac [::]
-  | x :: xs => sample (f x) (fun y => sample (map_p f xs) (fun ys => dirac (y :: ys)))
+  | x :: xs =>
+    sample: y  <- f x;
+    sample: ys <- map_p f xs;
+    dirac (y :: ys)
   end.
 
 Definition mapim_p (T : ordType) (S : Type) (R : ordType)
   (f : T -> S -> {prob R}) (m : {fmap T -> S}) : {prob {fmap T -> R}} :=
-  sample (map_p (fun p => sample (f p.1 p.2) (dirac \o pair p.1)) (val m)) (dirac \o mkfmap).
+  let do_pair p := sample: y <- f p.1 p.2; dirac (p.1, y) in
+  sample: pairs <- map_p do_pair (val m);
+  dirac (mkfmap pairs).
