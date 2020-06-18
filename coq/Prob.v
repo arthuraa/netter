@@ -4,7 +4,7 @@ Require Import Coq.Unicode.Utf8.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice seq
   ssrint rat ssralg ssrnum bigop.
 
-From extructures Require Import ord fset fmap.
+From extructures Require Import ord fset fmap ffun.
 
 From void Require Import void.
 
@@ -31,6 +31,7 @@ Qed.
 
 Arguments bigcupP {_ _ _ _ _ _}.
 Arguments mkfmap {_ _}.
+Arguments suppPn {_ _ _ _ _}.
 (* /MOVE *)
 
 
@@ -48,13 +49,16 @@ Section Prob.
 Variable T : ordType.
 Implicit Types (x : T) (X : {fset T}) (f : T -> rat).
 
-Record distr := Distr {dval : {fmap T -> {x : rat | 0 < x}}}.
+Record distr := Distr {
+  dval :> ffun (fun _ : T => 0 : rat);
+  _    :  all (fun x => 0 <= dval x) (supp dval)
+}.
 Definition distr_of & phant T := distr.
 Notation "{ 'distr'  T }" := (distr_of (Phant T))
   (at level 0, format "{ 'distr'  T }") : form_scope.
 Identity Coercion distr_of_distr : distr_of >-> distr.
 
-Canonical distr_newType  := [newType for dval].
+Canonical distr_subType  := [subType for dval].
 Definition distr_eqMixin := [eqMixin of distr by <:].
 Canonical distr_eqType   := EqType distr distr_eqMixin.
 Definition distr_choiceMixin := [choiceMixin of distr by <:].
@@ -69,50 +73,16 @@ Canonical distr_of_ordType := [ordType of {distr T}].
 
 Implicit Types (d : {distr T}).
 
-Definition fun_of_distr (d : distr) (x : T) : rat :=
-  if val d x is Some p then val p else 0%R.
-
-Coercion fun_of_distr : distr >-> Funclass.
-
 Lemma eq_distr d1 d2 : d1 =1 d2 <-> d1 = d2.
 Proof.
-split=> [e|-> //]; apply/val_inj.
-apply/eq_fmap=> x; move: (e x).
-rewrite /fun_of_distr.
-case: (val d1 x) (val d2 x)=> [y1|] [y2|] //=.
-- by move=> /val_inj ->.
-- by move=> {}e; move: (valP y1); rewrite /=  e.
-- by move=> {}e; move: (valP y2); rewrite /= -e.
+by split=> [e|-> //]; apply/val_inj/eq_ffun.
 Qed.
 
 Lemma distr_ge0 d x : 0 <= d x.
 Proof.
-rewrite /fun_of_distr; case: (val d x)=> [m|//].
-by apply/Num.Theory.ltrW/valP.
+case: (boolP (x \in supp d))=> [|/suppPn -> //].
+apply/allP: x; exact/(valP d).
 Qed.
-
-Definition supp (d : {distr T}) : {fset T} :=
-  domm (val d).
-
-Lemma mem_supp d x : (x \in supp d) = (0 < d x).
-Proof.
-rewrite /fun_of_distr /supp mem_domm.
-by case: (val d x)=> // r; rewrite valP.
-Qed.
-
-Lemma mem_suppN d x : (x \in supp d) = (d x != 0).
-Proof.
-by rewrite mem_supp Num.Theory.ltr_neqAle eq_sym distr_ge0 andbT.
-Qed.
-
-Lemma suppPn d x : reflect (d x = 0) (x \notin supp d).
-Proof.
-rewrite /fun_of_distr /supp mem_domm.
-apply/(iffP idP); case: (val d x)=> // [[/= r rP] e].
-by rewrite e in rP.
-Qed.
-
-Arguments suppPn {d x}.
 
 Definition mass d := \sum_(x <- supp d) d x.
 
@@ -124,27 +94,32 @@ have -> : supp d = fset_filter (mem (supp d)) X.
   apply/eq_fset=> x; rewrite in_fset_filter /=.
   by case: (boolP (x \in supp d))=> // /(fsubsetP sub) ->.
 rewrite val_fset_filter big_filter big_mkcond /=.
-apply/eq_big=> // x _.
-by rewrite /supp /fun_of_distr mem_domm; case: (val d x).
+by apply/eq_big=> // x _; case: ifPn=> // /suppPn ->.
 Qed.
 
-Definition mkdistr (X : {fset T}) (f : T -> rat) :=
-  Distr (mkfmapfp (insub \o f) X).
+Fact mkdistr_key : unit. Proof. exact: tt. Qed.
 
-Lemma mkdistrE X f x :
-  mkdistr X f x = if (x \in X) && (0 <= f x) then f x else 0%R.
+Lemma mkdistr_subproof (X : {fset T}) (f : T -> rat) :
+  (forall x, x \in X -> 0 <= f x) ->
+  let ff := @mkffun _ _ (fun _ => 0) f X in
+  all (fun x => 0 <= ff x) (supp ff).
 Proof.
-rewrite /mkdistr /fun_of_distr /= mkfmapfpE.
-case: ifP=> //= _; case: insubP=> [m pos e //|].
-  by rewrite (Num.Theory.ltrW pos).
-by case: (Num.Theory.sgrP (f x)).
+move=> /= pos; apply/allP=> x _; rewrite mkffunE.
+by case: ifP=> // /pos.
 Qed.
 
-Lemma supp_mkdistr X f : supp (mkdistr X f) = fset_filter (fun x => 0 < f x) X.
+Definition mkdistr X f pos :=
+  locked_with mkdistr_key
+    (Distr (@mkdistr_subproof X f pos)).
+
+Lemma mkdistrE X f pos x :
+  @mkdistr X f pos x = if (x \in X) then f x else 0%R.
+Proof. by rewrite /mkdistr unlock /= mkffunE. Qed.
+
+Lemma supp_mkdistr X f pos : supp (@mkdistr X f pos) = fset_filter (fun x => f x != 0) X.
 Proof.
-apply/eq_fset=> x.
-rewrite /supp /mkdistr /= domm_mkfmapfp in_fset mem_filter in_fset_filter /=.
-by case: insubP=> [? ->|/negbTE ->].
+apply/eq_fset=> x; rewrite mem_supp mkdistrE.
+by rewrite -mkffunE -mem_supp supp_mkffun in_fset mem_filter.
 Qed.
 
 Record prob :=
@@ -168,20 +143,17 @@ Canonical prob_of_eqType  := [eqType  of {prob T}].
 Canonical prob_of_choiceType := [choiceType of {prob T}].
 Canonical prob_of_ordType := [ordType of {prob T}].
 
-Lemma mkprob_subproof X f :
-  (forall x, 0 <= f x) ->
+Lemma mkprob_subproof X f pos :
   \sum_(x <- X) f x = 1 ->
-  \sum_(x <- supp (mkdistr X f)) mkdistr X f x == 1.
+  mass (@mkdistr X f pos) == 1.
 Proof.
-move=> pos <-; apply/eqP.
-rewrite [RHS](bigID (fun x => 0 < f x)) /=.
-have -> : \sum_(x <- X | ~~ (0 < f x)) f x = 0.
-  rewrite big1 // => x.
-  by case: (Num.Theory.sgrP (f x)) (pos x).
-rewrite GRing.addr0 supp_mkdistr val_fset_filter big_filter.
+move=> <-; apply/eqP.
+rewrite [RHS](bigID (fun x => f x == 0)) /=.
+have -> : \sum_(x <- X | f x == 0) f x = 0.
+  by rewrite big1 // => x /eqP.
+rewrite GRing.add0r /mass supp_mkdistr val_fset_filter big_filter.
 rewrite big_seq_cond [RHS]big_seq_cond.
-apply: eq_big=> // x /andP [x_X _].
-by rewrite mkdistrE x_X pos.
+by apply: eq_big=> // x /andP [x_X _]; rewrite mkdistrE x_X.
 Qed.
 
 Fact mkprob_key : unit. Proof. exact: tt. Qed.
@@ -191,14 +163,12 @@ Definition mkprob X f pos e : {prob T} :=
 
 Lemma mkprobE X f pos e x :
   @mkprob X f pos e x = if x \in X then f x else 0.
-Proof.
-by rewrite /mkprob unlock /= mkdistrE pos andbT.
-Qed.
+Proof. by rewrite /mkprob unlock /= mkdistrE. Qed.
 
 Definition dirac_def x x' : rat :=
   if x == x' then 1 else 0.
 
-Lemma dirac_subproof1 x x' : 0 <= dirac_def x x'.
+Lemma dirac_subproof1 x x' : x' \in fset1 x -> 0 <= dirac_def x x'.
 Proof. by rewrite /dirac_def; case: eq_op. Qed.
 
 Lemma dirac_subproof2 x : \sum_(x' <- fset1 x) dirac_def x x' = 1.
@@ -207,7 +177,7 @@ by rewrite /= big_seq1 /dirac_def eqxx.
 Qed.
 
 Definition dirac x :=
-  mkprob (dirac_subproof1 x) (dirac_subproof2 x).
+  mkprob (@dirac_subproof1 x) (dirac_subproof2 x).
 
 Lemma diracE x x' : dirac x x' = if x' == x then 1 else 0.
 Proof.
@@ -218,7 +188,7 @@ Qed.
 Lemma supp_dirac x : supp (dirac x) = fset1 x.
 Proof.
 apply/eq_fset=> x'.
-by rewrite mem_supp in_fset1 diracE; case: eq_op.
+by rewrite mem_supp in_fset1 diracE; case: ifP.
 Qed.
 
 Lemma supp_diracP x x' : reflect (x' = x) (x' \in supp (dirac x)).
@@ -276,7 +246,6 @@ Notation "{ 'distr' T }" := (distr_of (Phant T))
 Notation "{ 'prob' T }" := (prob_of (Phant T))
   (at level 0, format "{ 'prob'  T }") : form_scope.
 
-Arguments suppPn {_ _ _}.
 Arguments dirac {_} x.
 
 Section Sample.
@@ -288,9 +257,9 @@ Implicit Types (x : T) (y : S).
 Let Y   : {fset S} := \bigcup_(x <- supp p) supp (f x).
 Let P y : rat      := \sum_(x <- supp p) p x * f x y.
 
-Lemma sample_subproof1 y : 0 <= P y.
+Lemma sample_subproof1 y : y \in Y -> 0 <= P y.
 Proof.
-apply: Num.Theory.sumr_ge0 => x _.
+move=> _; apply: Num.Theory.sumr_ge0 => x _.
 apply: Num.Theory.mulr_ge0; exact: distr_ge0.
 Qed.
 
@@ -316,9 +285,9 @@ rewrite /P Num.Theory.psumr_eq0 -?has_predC /=; last first.
   move=> x _; apply: Num.Theory.mulr_ge0; exact: distr_ge0.
 apply/(sameP bigcupP)/(iffP hasP).
 - case=> /= x x_p n0; exists x=> //.
-  by move: n0; rewrite GRing.mulf_eq0 negb_or mem_suppN; case/andP.
-- case=> /= x; rewrite !mem_suppN => x_p _ y_f.
-  by exists x; rewrite 1?mem_suppN // GRing.mulf_neq0.
+  by move: n0; rewrite GRing.mulf_eq0 negb_or mem_supp; case/andP.
+- case=> /= x; rewrite !mem_supp => x_p _ y_f.
+  by exists x; rewrite 1?mem_supp // GRing.mulf_neq0.
 Qed.
 
 Lemma sampleE y : sample y = P y.
@@ -330,7 +299,7 @@ Qed.
 Lemma supp_sample : supp sample = Y.
 Proof.
 apply/eq_fset=> x.
-by rewrite mem_suppN sample_defE0 sampleE.
+by rewrite mem_supp sample_defE0 sampleE.
 Qed.
 
 Lemma supp_sampleP y :
