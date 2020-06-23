@@ -54,7 +54,7 @@ Record distr := Distr {
   _    :  all (fun x => 0 <= dval x) (supp dval)
 }.
 Definition distr_of & phant T := distr.
-Notation "{ 'distr'  T }" := (distr_of (Phant T))
+Notation "{ 'distr' T }" := (distr_of (Phant T))
   (at level 0, format "{ 'distr'  T }") : form_scope.
 Identity Coercion distr_of_distr : distr_of >-> distr.
 
@@ -247,6 +247,7 @@ Notation "{ 'prob' T }" := (prob_of (Phant T))
   (at level 0, format "{ 'prob'  T }") : form_scope.
 
 Arguments dirac {_} x.
+Arguments of_dirac {_} p.
 
 Section Sample.
 
@@ -318,7 +319,7 @@ Local Open Scope prob_scope.
 Notation "'sample:' x '<-' t1 ';' t2" :=
   (sample t1 (fun x => t2))
   (at level 20, t1 at level 100, t2 at level 200,
-   right associativity, format "'[' 'sample:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2 ")
+   right associativity, format "'[' 'sample:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2")
   : prob_scope.
 
 Section SampleProps.
@@ -348,7 +349,37 @@ apply/eq_fset=> x'; rewrite in_fset_filter eq_sym.
 by case: (x' =P x)=> // ->; rewrite (negbTE x_p).
 Qed.
 
+Lemma eq_sample (p : {prob T}) (f g : T -> {prob S}) :
+  f =1 g -> sample p f = sample p g.
+Proof.
+move=> efg; apply/eq_prob=> y.
+by rewrite !sampleE; apply/eq_big=> // x _; rewrite efg.
+Qed.
+
 End SampleProps.
+
+Lemma sampleA (T S R : ordType) p (f : T -> {prob S}) (g : S -> {prob R}) :
+  (sample: y <- (sample: x <- p; f x); g y) =
+  (sample: x <- p; sample: y <- f x; g y).
+Proof.
+apply/eq_prob=> z.
+transitivity (\sum_(y <- supp (sample: x <- p; f x))
+                \sum_(x <- supp p) p x * f x y * g y z).
+  rewrite sampleE; apply/eq_big=> // y _.
+  by rewrite sampleE GRing.mulr_suml.
+rewrite sampleE exchange_big /= big_seq [RHS]big_seq.
+apply/eq_big=> // x px.
+transitivity (\sum_(y <- supp (sample: x <- p; f x))
+                 p x * (f x y * g y z)).
+  by apply/eq_big=> ? // _; rewrite GRing.mulrA.
+rewrite <- GRing.mulr_sumr; congr *%R; rewrite sampleE.
+have /fsetIidPl <-: fsubset (supp (f x)) (supp (sample: x <- p; f x)).
+  apply/fsubsetP=> y fxy; rewrite supp_sample.
+  by apply/bigcupP; exists x.
+rewrite /fsetI val_fset_filter big_filter [RHS]big_mkcond /=.
+apply/eq_big=> // y _; rewrite mem_supp.
+by case: eqP=> //= ->; rewrite GRing.mul0r.
+Qed.
 
 Open Scope prob_scope.
 

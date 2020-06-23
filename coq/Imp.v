@@ -4,7 +4,7 @@ Require Import Coq.Unicode.Utf8.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice seq
   ssrint rat ssralg ssrnum.
 
-From extructures Require Import ord fset fmap.
+From extructures Require Import ord fset fmap ffun.
 
 From void Require Import void.
 
@@ -33,108 +33,130 @@ Proof.
 by rewrite /filter_map mkfmapfpE mem_domm; case: (m x).
 Qed.
 End FilterMap.
+
+Section Update.
+
+Context {T : ordType} {S : eqType} {def : T -> S}.
+
+Definition updm (f : ffun def) (xs : {fmap T -> S}) : ffun def :=
+  mkffun (fun v => if xs v is Some x then x else f v)
+         (supp f :|: domm xs).
+
+Lemma updmE f xs x :
+  updm f xs x = if xs x is Some y then y else f x.
+Proof.
+rewrite /updm mkffunE in_fsetU orbC mem_domm.
+case e: (xs x)=> [y|] //=.
+by case: ifPn=> // /suppPn ->.
+Qed.
+
+End Update.
 (* /MOVE *)
 
 Inductive com :=
-| Skip
-| Assn of {fmap var -> {prob zexpr}} & com
-| If of bexpr & com & com & com
-| Block of {fset var} & com & com.
+| CSkip
+| CAssn of {fmap var -> {prob zexpr}} & com
+| CIf of bexpr & com & com & com
+| CBlock of {fset var} & com & com.
 
-Record state :=
-  State {stval : {fmap var -> {x : int | x != 0}}}.
+Definition com_indMixin := [indMixin for com_rect].
+Canonical com_indType := IndType _ com com_indMixin.
+Definition com_eqMixin := [derive eqMixin for com].
+Canonical com_eqType := EqType com com_eqMixin.
 
-Canonical state_newType := [newType for stval].
-Definition state_eqMixin := [eqMixin of state by <:].
-Canonical state_eqType := EqType state state_eqMixin.
-Definition state_choiceMixin := [choiceMixin of state by <:].
-Canonical state_choiceType := Eval hnf in ChoiceType state state_choiceMixin.
-Definition state_ordMixin := [ordMixin of state by <:].
-Canonical state_ordType := Eval hnf in OrdType state state_ordMixin.
-
-Definition fun_of_state (st : state) (v : var) : int :=
-  if val st v is Some n then val n else 0.
-
-Coercion fun_of_state : state >-> Funclass.
+Local Notation state := (ffun (fun x : var => 0 : int)).
 
 Implicit Types (c : com) (st : state) (φ : state → var → int).
 
-Lemma eq_state st1 st2 : st1 =1 st2 <-> st1 = st2.
-Proof.
-split=> [e|-> //]; apply/val_inj.
-apply/eq_fmap=> v; move: (e v).
-rewrite /fun_of_state.
-case: (val st1 v) (val st2 v)=> [y1|] [y2|] //=.
-- by move=> /val_inj ->.
-- by move=> {}e; move: (valP y1); rewrite /=  e.
-- by move=> {}e; move: (valP y2); rewrite /= -e.
-Qed.
+Definition Assn assn :=
+  if assn == emptym then CSkip
+  else CAssn assn CSkip.
 
-Definition state_of_fun (X : {fset var}) (f : var -> int) :=
-  State (mkfmapfp (insub \o f) X).
+Definition Block vs c :=
+  if vs == fset0 then c
+  else if c is CSkip then CSkip
+  else CBlock vs c CSkip.
 
-Lemma state_of_funE X f x :
-  state_of_fun X f x = if x \in X then f x else 0.
-Proof.
-rewrite /state_of_fun /fun_of_state /= mkfmapfpE /=.
-case: (x \in X)=> //.
-case: insubP=> [? ? -> //|].
-by rewrite negbK=> /eqP ->.
-Qed.
-
-Definition upd st (assn : {fmap var -> int}) : state :=
-  state_of_fun (domm (val st) :|: domm assn)
-    (fun v => if assn v is Some x then x else st v).
-
-Lemma updE st assn v :
-  upd st assn v = if assn v is Some x then x else st v.
-Proof.
-rewrite /upd state_of_funE in_fsetU /fun_of_state /= !mem_domm.
-case: (stval st v)=> //=.
-by case: (assn v).
-Qed.
+Fixpoint Seq c1 c2 :=
+  match c1 with
+  | CSkip => c2
+  | CAssn assn c1 => CAssn assn (Seq c1 c2)
+  | CIf e cthen celse c1 => CIf e cthen celse (Seq c1 c2)
+  | CBlock vs c c1 => CBlock vs c (Seq c1 c2)
+  end.
 
 Fixpoint run φ c st : {prob state} :=
   match c with
-  | Skip =>
+  | CSkip =>
     dirac st
-  | Assn assn c =>
+  | CAssn assn c =>
     let eval _ pe := sample: e <- pe; dirac (eval_zexpr (φ st) e) in
     sample: assn' <- mapim_p eval assn;
-    run φ c (upd st assn')
-  | If e cthen celse c =>
+    run φ c (updm st assn')
+  | CIf e cthen celse c =>
     let branch := if eval_bexpr (φ st) e then cthen else celse in
     sample (run φ branch st) (run φ c)
-  | Block vs block c =>
-    let old := state_of_fun vs st in
-    let new := upd st (mkfmapf (fun _ => 0%R) vs) in
+  | CBlock vs block c =>
+    let old : state := mkffun st vs in
+    let new := updm st (mkfmapf (fun _ => 0%R) vs) in
     sample: st' <- run φ block new;
-    run φ c (upd st' (mkfmapf old vs))
+    run φ c (updm st' (mkfmapf old vs))
   end.
 
-Record renaming := Renaming {
-  ren_val : {fmap var → var};
-  _       : all (fun v => ren_val v != Some v) (domm ren_val);
-}.
+Lemma run_Assn φ assn st :
+  run φ (Assn assn) st = run φ (CAssn assn CSkip) st.
+Proof.
+rewrite /Assn /=; case: eqP=> [->|] //=.
+rewrite /mapim_p /= !sample_diracL; congr dirac.
+by apply/eq_ffun=> v; rewrite updmE.
+Qed.
 
-Canonical renaming_subType := [subType for ren_val].
+Lemma run_Block φ vs c st :
+  run φ (Block vs c) st = run φ (CBlock vs c CSkip) st.
+Proof.
+rewrite /Block /=; case: eqP=> [->|_] //=.
+  rewrite (_ : updm st _ = st).
+    rewrite -[LHS]sample_diracR; apply/eq_sample=> /= st'.
+    by congr dirac; apply/eq_ffun=> v; rewrite updmE /=.
+  by apply/eq_ffun=> v /=; rewrite updmE /=.
+case: c=> //=; rewrite sample_diracL; congr dirac.
+apply/eq_ffun=> v; rewrite !updmE /= !mkfmapfE mkffunE.
+by case: ifP=> // ->.
+Qed.
 
-Definition fun_of_renaming (r : renaming) v :=
-  if val r v is Some v' then v' else v.
-
-Coercion fun_of_renaming : renaming >-> Funclass.
+Lemma run_Seq φ c1 c2 st :
+  run φ (Seq c1 c2) st =
+  sample: st' <- run φ c1 st; run φ c2 st'.
+Proof.
+elim: c1 st=> /=.
+- by move=> st; rewrite sample_diracL.
+- move=> assn c1 IH st.
+  rewrite [RHS]sampleA; apply/eq_sample=> /= st'.
+  by rewrite IH.
+- move=> e cthen _ celse _ c1 IH st; rewrite /= sampleA.
+  apply/eq_sample=> st'; exact: IH.
+- move=> vs c _ c' IH st; rewrite sampleA.
+  apply/eq_sample=> st'; exact: IH.
+Qed.
 
 Module Inlining.
 
-Definition fresh_for (fv : {fmap string → nat}) (V : {fset var}) :=
-  ∀ x n, Var x n \in V → if fv x is Some m then n <= m else false.
+Notation renaming  := (ffun (fun v : var => v)).
 
 Record istate := IState {
-  fresh_vars  : {fmap string → nat};
+  fresh_vars  : ffun (fun n : string => 0 : nat);
   formulas    : seq (var * zexpr);
-  used_vars   : {fmap var → {fset var}};
-  ren         : renaming;
+  (* Map formulas to the state variables needed to compute them. *)
+  used_vars   : ffun (fun v : var => fset1 v);
 }.
+
+Fixpoint eval_forms (fs : seq (var * zexpr)) st v : int :=
+  if fs is (f, e) :: fs then
+    if v == f then eval_zexpr (eval_forms fs st) e
+    else eval_forms fs st v
+  else st v.
+
+Implicit Types (ist : istate).
 
 Definition M T : Type := istate → istate * T.
 
@@ -146,44 +168,94 @@ Definition bind T S (x : M T) (f : T → M S) : M S :=
 
 Notation "'bind:' x '<-' t1 ';' t2" :=
   (bind t1 (fun x => t2))
-  (at level 20, t1 at level 100, t2 at level 200,
+  (at level 20, x pattern, t1 at level 100, t2 at level 200,
    right associativity, format "'[' 'bind:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2 ").
 
+Notation "f >> g" :=
+  (bind f (fun _ => g))
+  (at level 40, left associativity).
+
 Definition get T (f : istate → T) : M T :=
-  fun s => (s, f s).
+  fun ist => (ist, f ist).
 
 Definition mod (f : istate → istate) : M unit :=
-  fun s => (f s, tt).
+  fun ist => (f ist, tt).
 
-Definition set_fresh_vars fv : M unit :=
-  mod (fun '(IState _ f u r) => IState fv f u r).
+Definition intern1 (rn : renaming) (v : var) (e : zexpr) : M renaming := fun ist =>
+  let: IState fv fs uv := ist in
+  let n   := vname v in
+  let vn  := fv n in
+  let v'  := Var n vn in
+  let fv' := upd fv n vn.+1 in
+  let e'  := subst_zexpr (ZVar \o rn) e in
+  let fs' := (v', e') :: fs in
+  let vs  := \bigcup_(v'' <- zexpr_vars e) uv v'' in
+  let uv' := upd uv v' vs in
+  let rn' := upd rn v v' in
+  (IState fv' fs' uv', rn').
 
-Definition fresh (x : string) : M var :=
-  bind: fv <- get fresh_vars;
-  if fv x is Some m then
-    bind: _ <- set_fresh_vars (setm fv x m.+1);
-    ret (Var x m)
-  else
-    bind: _ <- set_fresh_vars (setm fv x 0);
-    ret (Var x 0).
+Definition intern (rn : renaming) (assn : {fmap var -> zexpr}) : M renaming :=
+  foldl (fun f ve => bind: rn' <- f; intern1 rn' ve.1 ve.2) (ret rn) (val assn).
 
-Definition intern_var (v : var) (e : zexpr) : M unit :=
-  bind: v' <- fresh (vname v);
-  bind: u  <- get used_vars;
-  let vs := \bigcup_(v'' <- zexpr_vars e) u v'' in
-  mod (fun '(IState fv fs uv r) => IState fv ((v', e) :: fs)
+Definition conflicts (rn : renaming) (vs : {fset var}) : M {fset var} := fun ist =>
+  let: IState fv fs uv := ist in
+  (IState fv fs uv,
+   fset_filter (fun v => fdisjoint (uv (rn v)) vs) (supp rn)).
 
-Fixpoint inline_loop (c : com) : M com :=
+Fixpoint inline_loop (rn : renaming) (c : com) : M (renaming * com) :=
   match c with
   | Skip =>
-    ret Skip
+    ret (rn, Skip)
   | Assn assn c =>
     let det_assn := filter_map (fun=> of_dirac) assn in
     if domm det_assn == domm assn then
-      bind: r <- get renaming;
-      let det_assn := mapm (subst_zexpr (ZVar \o r)) det_assn in
+      bind: rn' <- intern rn det_assn;
+      inline_loop rn' c
+    else
+      bind: to_flush <- conflicts rn (domm assn);
+      let assn0 := mkfmapf (dirac \o ZVar \o rn) to_flush in
+      let rn0   := updm rn (mkfmapf id to_flush) in
+      let assn1 := mapm (fun pe => sample: e <- pe; dirac (subst_zexpr (ZVar \o rn0) e)) assn in
+      let rn1   := updm rn0 (mkfmapf id (domm assn1)) in
+      bind: (rn', c') <- inline_loop rn c;
+      ret (rn', Assn assn0 (Assn assn1 c'))
+  | If e cthen celse c =>
+    let e' := subst_bexpr (ZVar \o rn) e in
+    bind: (rn_then, cthen') <- inline_loop rn cthen;
+    bind: (rn_else, celse') <- inline_loop rn celse;
+    let to_flush0 := supp rn_then :|: supp rn_else in
+    let updated v := (rn_then v != rn v) || (rn_else v != rn v) in
+    let to_flush1 := fset_filter updated to_flush0 in
+    match cthen', celse' with
+    | Skip, Skip =>
+      let merge v := ZTest e' (ZVar (rn_then v)) (ZVar (rn_else v)) in
+      bind: rn' <- intern rn (mkfmapf merge to_flush1);
+      inline_loop rn' c
+    | _, _ =>
+      let assn_then := mkfmapf (dirac \o ZVar \o rn_then) to_flush1 in
+      let cthen''   := Seq cthen' (Assn assn_then Skip) in
+      let assn_else := mkfmapf (dirac \o ZVar \o rn_else) to_flush1 in
+      let celse''   := Seq celse' (Assn assn_else Skip) in
+      let rn_merge  := updm rn (mkfmapf id to_flush1) in
+      bind: (rn', c') <- inline_loop rn_merge c;
+      ret (rn', If e' cthen'' celse'' c')
+    end
+  | Block vs c1 c2 =>
+    bind: to_flush0 <- conflicts rn vs;
+    let assn0 := mkfmapf (dirac \o ZVar \o rn) to_flush0 in
+    let rn0 := updm rn (mkfmapf id (to_flush0 :|: vs)) in
+    bind: (rn1, c1') <- inline_loop rn0 c1;
+    bind: to_flush1  <- conflicts rn1 vs;
+    let assn1 := mkfmapf (dirac \o ZVar \o rn1) to_flush1 in
+    let rn1'  := updm rn1 (mkfmapf id to_flush1) in
+    bind: (rn2, c2') <- inline_loop rn1' c2;
+    ret (rn2, Assn assn0 (Block vs c1 c2))
+  end.
 
-
+Lemma inline_loopP rn c st :
+  inline_loop rn c = (rn', c') ->
+  run (eval_forms f) c (updm st (mkfmapf (eval_forms f \o rn) (supp rn))) =
+  sample:
 
 Definition spec T (P : istate → Prop) (x : M T) (Q : T → istate → Prop) : Prop :=
   ∀ s, P s → Q (x s).2 (x s).1.

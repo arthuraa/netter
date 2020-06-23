@@ -158,6 +158,12 @@ with subst_qexpr f qe : qexpr :=
 
 End Eval.
 
+Axiom bexpr_eqMixin : Equality.mixin_of bexpr.
+Canonical bexpr_eqType := EqType bexpr bexpr_eqMixin.
+Axiom bexpr_choiceMixin : Choice.mixin_of bexpr.
+Canonical bexpr_choiceType := Eval hnf in ChoiceType bexpr bexpr_choiceMixin.
+Axiom bexpr_ordMixin : Ord.mixin_of bexpr.
+Canonical bexpr_ordType := Eval hnf in OrdType bexpr bexpr_ordMixin.
 Axiom zexpr_eqMixin : Equality.mixin_of zexpr.
 Canonical zexpr_eqType := EqType zexpr zexpr_eqMixin.
 Axiom zexpr_choiceMixin : Choice.mixin_of zexpr.
