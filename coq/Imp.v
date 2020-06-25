@@ -10,7 +10,7 @@ From void Require Import void.
 
 From deriving Require Import deriving.
 
-From RandC Require Import Expr Prob.
+From RandC Require Import Extra Expr Prob.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -19,43 +19,11 @@ Unset Printing Implicit Defensive.
 Local Open Scope fset_scope.
 Local Open Scope prob_scope.
 
-(* MOVE *)
-Section FilterMap.
-
-Variables T : ordType.
-Variables S R : Type.
-
-Definition filter_map (f : T -> S -> option R) (m : {fmap T -> S}) : {fmap T -> R} :=
-  mkfmapfp (fun x => obind (f x) (m x)) (domm m).
-
-Lemma filter_mapE f m x : filter_map f m x = obind (f x) (m x).
-Proof.
-by rewrite /filter_map mkfmapfpE mem_domm; case: (m x).
-Qed.
-End FilterMap.
-
-Section Update.
-
-Context {T : ordType} {S : eqType} {def : T -> S}.
-
-Definition updm (f : ffun def) (xs : {fmap T -> S}) : ffun def :=
-  mkffun (fun v => if xs v is Some x then x else f v)
-         (supp f :|: domm xs).
-
-Lemma updmE f xs x :
-  updm f xs x = if xs x is Some y then y else f x.
-Proof.
-rewrite /updm mkffunE in_fsetU orbC mem_domm.
-case e: (xs x)=> [y|] //=.
-by case: ifPn=> // /suppPn ->.
-Qed.
-
-End Update.
-(* /MOVE *)
+Local Notation assignment := {fmap var -> {prob zexpr}}.
 
 Inductive com :=
 | CSkip
-| CAssn of {fmap var -> {prob zexpr}} & com
+| CAssn of assignment & com
 | CIf of bexpr & com & com & com
 | CBlock of {fset var} & com & com.
 
@@ -66,11 +34,20 @@ Canonical com_eqType := EqType com com_eqMixin.
 
 Local Notation state := (ffun (fun x : var => 0 : int)).
 
-Implicit Types (c : com) (st : state) (φ : state → var → int).
+Implicit Types (c : com) (assn : assignment) (st : state) (φ : state → var → int).
+
+Definition subst_assn f assn :=
+  mapm (fun pe => sample: e <- pe; dirac (subst_zexpr f e)) assn.
+
+Definition assn_vars assn :=
+  \bigcup_(pe <- codomm assn)
+    \bigcup_(e  <- supp pe) zexpr_vars e.
 
 Definition Assn assn :=
   if assn == emptym then CSkip
   else CAssn assn CSkip.
+
+Definition DAssn dassn := Assn (mapm dirac dassn).
 
 Definition Block vs c :=
   if vs == fset0 then c
@@ -85,13 +62,25 @@ Fixpoint Seq c1 c2 :=
   | CBlock vs c c1 => CBlock vs c (Seq c1 c2)
   end.
 
+Infix ";;" := Seq (at level 40, left associativity).
+
+Lemma SeqA : associative Seq.
+Proof.
+move=> c1 c2 c3.
+elim: c1=> [|assn c1 IH|b cthen _ celse _ c1 IH|vs block _ c1 IH] /=;
+congruence.
+Qed.
+
+Lemma Seqc1 c : c;; CSkip = c.
+Proof. elim: c=> //= *; congruence. Qed.
+
 Fixpoint run φ c st : {prob state} :=
   match c with
   | CSkip =>
     dirac st
   | CAssn assn c =>
-    let eval _ pe := sample: e <- pe; dirac (eval_zexpr (φ st) e) in
-    sample: assn' <- mapim_p eval assn;
+    let eval pe := sample: e <- pe; dirac (eval_zexpr (φ st) e) in
+    sample: assn' <- mapm_p eval assn;
     run φ c (updm st assn')
   | CIf e cthen celse c =>
     let branch := if eval_bexpr (φ st) e then cthen else celse in
@@ -103,13 +92,17 @@ Fixpoint run φ c st : {prob state} :=
     run φ c (updm st' (mkfmapf old vs))
   end.
 
-Lemma run_Assn φ assn st :
-  run φ (Assn assn) st = run φ (CAssn assn CSkip) st.
+Lemma run_Assn φ assn c st :
+  run φ (Assn assn;; c) st = run φ (CAssn assn c) st.
 Proof.
 rewrite /Assn /=; case: eqP=> [->|] //=.
-rewrite /mapim_p /= !sample_diracL; congr dirac.
+rewrite /mapm_p unlock /mapim_p /= !sample_diracL; congr run.
 by apply/eq_ffun=> v; rewrite updmE.
 Qed.
+
+Lemma run_Assn0 φ assn st :
+  run φ (Assn assn) st = run φ (CAssn assn CSkip) st.
+Proof. by rewrite -run_Assn Seqc1. Qed.
 
 Lemma run_Block φ vs c st :
   run φ (Block vs c) st = run φ (CBlock vs c CSkip) st.
@@ -125,7 +118,7 @@ by case: ifP=> // ->.
 Qed.
 
 Lemma run_Seq φ c1 c2 st :
-  run φ (Seq c1 c2) st =
+  run φ (c1;; c2) st =
   sample: st' <- run φ c1 st; run φ c2 st'.
 Proof.
 elim: c1 st=> /=.
@@ -138,6 +131,262 @@ elim: c1 st=> /=.
 - move=> vs c _ c' IH st; rewrite sampleA.
   apply/eq_sample=> st'; exact: IH.
 Qed.
+
+Definition flush φ st dassn :=
+  updm st (mapm (eval_zexpr (φ st)) dassn).
+
+Lemma flushER st (rn : ffun ZVar) v :
+  flush id st (val rn) v = eval_zexpr st (rn v).
+Proof.
+rewrite /flush updmE mapmE [in rn v]/appf.
+case: (val rn v)=> //=.
+Qed.
+
+Lemma flushE φ st dassn v :
+  flush φ st dassn v =
+  if dassn v is Some e then eval_zexpr (φ st) e
+  else st v.
+Proof.
+rewrite /flush updmE mapmE.
+by case: (dassn v)=> [e|] //=.
+Qed.
+
+Lemma run_DAssn φ dassn c st :
+  run φ (DAssn dassn;; c) st
+  = run φ c (flush φ st dassn).
+Proof.
+rewrite run_Assn /= mapm_p_comp.
+under eq_mapm_p=> e do rewrite /= sample_diracL.
+by rewrite -mapm_p_comp mapm_p_dirac sample_diracL.
+Qed.
+
+Lemma AssnC dassn assn st :
+  fdisjoint (assn_vars (mapm dirac dassn)) (domm assn) ->
+  run id (DAssn dassn;; Assn assn) st =
+  run id (Assn (subst_assn (mkffunm ZVar dassn) assn);;
+          DAssn dassn) st.
+Proof.
+move=> dis.
+rewrite run_DAssn run_Assn0 /= run_Assn /=.
+rewrite /subst_assn mapm_p_comp.
+under [in RHS] eq_mapm_p=> pe /=.
+  rewrite sampleA.
+  under eq_sample=> e.
+    rewrite sample_diracL subst_zexprP.
+    under eq_eval_zexpr=> v.
+      have ->: eval_zexpr st (mkffunm ZVar dassn v) = flush id st dassn v.
+        by rewrite mkffunmE flushE; case: (dassn v).
+      over.
+    over.
+  over.
+apply: eq_in_sample=> /= vals /supp_mapm_pP [/= edomm ecodomm].
+rewrite -[DAssn dassn]Seqc1 run_DAssn /=; congr dirac.
+apply/eq_ffun=> v; rewrite !(updmE, mapmE).
+case dassn_v: (dassn v)=> [e|] //=.
+
+Module Inlining.
+
+Notation renaming := (ffun ZVar).
+
+Implicit Types (rn : renaming) (vs : {fset var}).
+
+Module Type CONFLICTS.
+Parameter conflicts :
+  renaming -> {fset var} -> {fset var}.
+Parameter conflicts_sub :
+  forall rn vs, fsubset vs (conflicts rn vs).
+Parameter conflicts_dis :
+  forall rn vs v,
+  v \in supp rn -> v \notin conflicts rn vs ->
+  fdisjoint (zexpr_vars (rn v)) (conflicts rn vs).
+End CONFLICTS.
+
+Module Export Conflicts : CONFLICTS.
+
+Definition conflicts rn vs := supp rn :|: vs.
+
+Lemma conflicts_sub rn vs : fsubset vs (conflicts rn vs).
+Proof. exact: fsubsetUr. Qed.
+
+Lemma conflicts_dis rn vs v :
+  v \in supp rn -> v \notin conflicts rn vs ->
+  fdisjoint (zexpr_vars (rn v)) (conflicts rn vs).
+Proof. by rewrite /conflicts in_fsetU => ->. Qed.
+
+End Conflicts.
+
+Inductive checkpoint_spec rn vs : renaming * renaming -> Prop :=
+| CheckpointSpec rn1 rn2 of
+  (forall st, flush id st (val rn) =
+    flush id (flush id st (val rn1)) (val rn2)) &
+  fdisjoint (supp rn2) vs &
+  (forall v, v \in supp rn2 -> fdisjoint (zexpr_vars (rn2 v)) vs)
+  : checkpoint_spec rn vs (rn1, rn2).
+
+Module Type CHECKPOINT.
+Parameter checkpoint :
+  renaming -> {fset var} -> renaming * renaming.
+Parameter checkpointP :
+  forall rn vs, checkpoint_spec rn vs (checkpoint rn vs).
+End CHECKPOINT.
+
+Module Export Checkpoint : CHECKPOINT.
+
+Definition checkpoint rn vs : renaming * renaming :=
+  let flush := conflicts rn vs in
+  let rn1   := mkffun rn flush in
+  let rn2   := mkffun rn (supp rn :\: flush) in
+  (rn1, rn2).
+
+Lemma checkpointP rn vs : checkpoint_spec rn vs (checkpoint rn vs).
+Proof.
+exists.
+- move=> st; apply/eq_ffun=> /= v; rewrite !flushER mkffunE.
+  rewrite in_fsetD; case: (boolP (v \in conflicts rn vs))=> vc /=.
+    by rewrite flushER mkffunE vc.
+  case: ifPn=> vrn /= .
+    apply/(@eq_in_eval_zexprP (zexpr_vars (rn v))); rewrite ?fsubsetxx //.
+    move=> v' v'v; rewrite flushER mkffunE.
+    by move: (fdisjointP (conflicts_dis vrn vc) _ v'v)=> /negbTE ->.
+  by rewrite flushER mkffunE (negbTE vc) (suppPn vrn).
+- apply/fdisjointP=> v; rewrite mem_supp mkffunE in_fsetD.
+  case: (boolP (v \in conflicts rn vs)); rewrite /= ?eqxx //.
+  move=> vc _; apply: contra vc.
+  exact: (fsubsetP (conflicts_sub rn vs)).
+- move=> v; rewrite mem_supp mkffunE in_fsetD.
+  case: ifP; rewrite ?eqxx //.
+  case/andP=> vc vrn e; apply/fdisjointP=> v' v'v.
+  have {}v'v: v' \notin conflicts rn vs.
+    exact: (fdisjointP (conflicts_dis vrn vc)).
+  apply: contra v'v; exact: (fsubsetP (conflicts_sub rn vs)).
+Qed.
+
+End Checkpoint.
+
+Fixpoint inline_loop rn c : renaming * com :=
+  match c with
+  | CSkip => (rn, CSkip)
+  | CAssn assn c =>
+    let det_assn := filter_map (fun=> of_dirac) assn in
+    if domm det_assn == domm assn then
+      let assn' := mapm (subst_zexpr rn) det_assn in
+      let rn'   := updm rn assn' in
+      inline_loop rn' c
+    else
+      let: (rn0, rn1) := checkpoint rn (domm assn) in
+      let: (rn2, c') :=  inline_loop rn1 c in
+      let  assn' := mapm (subst_zexpr rn1) assn in
+      (rn2, DAssn (val rn0);; Assn assn';; c')
+  | CIf e cthen celse c =>
+    let e' := subst_bexpr rn e in
+    let: (rn_then, cthen') := inline_loop rn cthen in
+    let: (rn_else, celse') := inline_loop rn celse in
+    let to_flush0 := supp rn_then :|: supp rn_else in
+    let updated v := (rn_then v != rn v) || (rn_else v != rn v) in
+    let to_flush1 := fset_filter updated to_flush0 in
+    if (cthen' == CSkip) && (celse' == CSkip) then
+      let merge v := ZTest e' (rn_then v) (rn_else v) in
+      let assn' := mkfmapf merge to_flush1 in
+      let rn' := updm rn assn' in
+      inline_loop rn' c
+    else
+      let assn_then := mkfmapf (dirac \o rn_then) to_flush1 in
+      let cthen''   := Seq cthen' (CAssn assn_then CSkip) in
+      let assn_else := mkfmapf (dirac \o rn_else) to_flush1 in
+      let celse''   := Seq celse' (CAssn assn_else CSkip) in
+      let rn_merge  := updm rn (mkfmapf ZVar to_flush1) in
+      let: (rn', c') := inline_loop rn_merge c in
+      (rn', CIf e' cthen'' celse'' c')
+  | CBlock vs block c =>
+    let: (rn0, rn1) := checkpoint rn vs in
+    let: (rn_block, block') := inline_loop rn1 block in
+    let: (rn2, rn3) := checkpoint rn_block vs in
+    let: (rn4, c') := inline_loop rn1 c in
+    (rn2, DAssn (val rn0);; Block vs (block';; DAssn (val rn2));; c')
+  end.
+
+Lemma inline_loopP rn c rn' c' st :
+  inline_loop rn c = (rn', c') ->
+  run id (DAssn (val rn);; c) st =
+  run id (c';; DAssn (val rn')) st.
+Proof.
+elim: c rn c' rn' st.
+- by move=> rn _ _ st [<- <-] /=; rewrite Seqc1.
+- move=> assn c IH rn c' rn' st /=.
+  case: (altP (domm _ =P domm _))=> [e|_].
+  + set assn' := filter_map (fun=> of_dirac) assn in e.
+    have assnE : assn = mapm dirac assn'.
+      apply/eq_fmap=> v; move/eq_fset/(_ v): e.
+      rewrite !mem_domm /assn' mapmE filter_mapE.
+      case: (assn v)=> [pe|] //=.
+      by case: (of_dirac pe) (of_diracK pe)=> //= e ->.
+    move: assn' e assnE=> /= {}assn _ ->.
+    rewrite mapimK; last by move=> _; exact: diracK.
+    set rn0 := updm rn _; move=> {}/IH <-.
+    rewrite !run_DAssn -run_Assn run_DAssn; congr run.
+    apply/eq_ffun=> /= v.
+    rewrite !flushER flushE flushER /rn0 updmE mapmE.
+    case: (assn v)=> //= e.
+    by rewrite subst_zexprP; apply/eq_eval_zexpr=> v'; rewrite flushER.
+  + case: checkpointP=> rn0 rn1 chk1 chk2 chk3.
+    case e: (inline_loop rn1 c)=> [{}rn' {}c'] [<- <-].
+    move/IH in e.
+    rewrite run_DAssn -run_Assn chk1 -run_DAssn. -![in RHS]SeqA [RHS]run_DAssn.
+    rewrite -
+
+
+Lemma inline_loopP rn c st :
+  let res := inline_loop rn c in
+  run id c (flush st rn) =
+  sample: st' <- run id res.2 st;
+  dirac (flush st' res.1).
+Proof.
+elim: c rn st.
+- by move=> rn st; rewrite /= sample_diracL.
+- move=> assn c IH rn st /=.
+  case: (altP (domm _ =P domm _))=> [e|_].
+  + set assn' := filter_map (fun=> of_dirac) assn in e.
+    have assnE : assn = mapm dirac assn'.
+      apply/eq_fmap=> v; move/eq_fset/(_ v): e.
+      rewrite !mem_domm /assn' mapmE filter_mapE.
+      case: (assn v)=> [pe|] //=.
+      by case: (of_dirac pe) (of_diracK pe)=> //= e ->.
+    move: assn' e assnE=> /= {}assn _ ->.
+    rewrite mapm_p_comp.
+    under eq_mapm_p => ? do rewrite /= sample_diracL.
+    rewrite -(mapm_p_comp dirac (eval_zexpr (flush st rn))).
+    rewrite mapm_p_dirac sample_diracL mapimK; last first.
+      move=> _; exact: diracK.
+    by rewrite updm_flush IH.
+  + case: checkpointP=> rn0 rn1 chk1 chk2 chk3.
+    rewrite [inline_loop rn1 c]surjective_pairing /=.
+    rewrite -SeqA run_Seq assn_of_rnP sample_diracL.
+
+
+
+    rewrite -mapm_mkfmapf mapm_p_comp.
+    under [in RHS]eq_mapm_p => /= e do rewrite sample_diracL.
+    set to_flush := conflicts rn (domm assn).
+    set assn0 := mkfmapf rn to_flush.
+    rewrite -[in RHS]mapm_p_comp mapm_p_dirac sample_diracL /= sampleA.
+    set rn0 := updm rn (mkfmapf ZVar to_flush).
+    set st0 := updm st (mapm (eval_zexpr st) assn0).
+    rewrite mapm_p_comp /=.
+    under [in RHS]eq_mapm_p => pe.
+      rewrite /= sampleA.
+      under eq_sample => e.
+        rewrite sample_diracL subst_zexprP.
+        under eq_eval_zexpr=> v.
+          rewrite (_ : eval_zexpr st0 (rn0 v) = flush st rn v); first over.
+          rewrite flushE /rn0 updmE mkfmapfE.
+          case: (boolP (v \in to_flush))=> [flush_v|not_flush_v].
+            by rewrite /= /st0 updmE mapmE /assn0 mkfmapfE flush_v /=.
+
+
+      over.
+    under [in RHS]eq_mapm_p => pe.
+      under eq_sample => e.
+
 
 Module Inlining.
 
@@ -156,7 +405,17 @@ Fixpoint eval_forms (fs : seq (var * zexpr)) st v : int :=
     else eval_forms fs st v
   else st v.
 
-Implicit Types (ist : istate).
+Implicit Types (rn : renaming) (ist : istate).
+
+Definition state_view st rn ist :=
+  updm st (mkfmapf (eval_forms (formulas ist) st \o rn) (supp rn)).
+
+Definition istate_vars ist :=
+  \bigcup_(p <- formulas ist) (fset1 p.1 :|: zexpr_vars p.2) :|:
+  \bigcup_(v <- supp (used_vars ist)) used_vars ist v.
+
+Definition wf_istate ist :=
+  all (fun v => vnum v < fresh_vars ist (vname v)) (istate_vars ist).
 
 Definition M T : Type := istate → istate * T.
 
@@ -169,7 +428,7 @@ Definition bind T S (x : M T) (f : T → M S) : M S :=
 Notation "'bind:' x '<-' t1 ';' t2" :=
   (bind t1 (fun x => t2))
   (at level 20, x pattern, t1 at level 100, t2 at level 200,
-   right associativity, format "'[' 'bind:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2 ").
+   right associativity, format "'[' 'bind:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2").
 
 Notation "f >> g" :=
   (bind f (fun _ => g))
@@ -194,6 +453,17 @@ Definition intern1 (rn : renaming) (v : var) (e : zexpr) : M renaming := fun ist
   let rn' := upd rn v v' in
   (IState fv' fs' uv', rn').
 
+Lemma intern1P rn v e ist ist' rn' st v' :
+  intern1 rn v e ist = (ist', rn') ->
+  eval_forms (formulas ist') st (rn' v') =
+  if v' == v then
+    eval_zexpr (eval_forms (formulas ist') st) e
+  else eval_forms (formulas ist') st (rn v).
+Proof.
+case: ist=> fv fs uv /= [<- <-] {ist' rn'} /=.
+rewrite updE; case: (altP (v' =P v))=> [_|ne].
+  rewrite eqxx subst_zexprP; apply: eq_eval_zexpr=> v'' /=.
+
 Definition intern (rn : renaming) (assn : {fmap var -> zexpr}) : M renaming :=
   foldl (fun f ve => bind: rn' <- f; intern1 rn' ve.1 ve.2) (ret rn) (val assn).
 
@@ -204,9 +474,9 @@ Definition conflicts (rn : renaming) (vs : {fset var}) : M {fset var} := fun ist
 
 Fixpoint inline_loop (rn : renaming) (c : com) : M (renaming * com) :=
   match c with
-  | Skip =>
-    ret (rn, Skip)
-  | Assn assn c =>
+  | CSkip =>
+    ret (rn, CSkip)
+  | CAssn assn c =>
     let det_assn := filter_map (fun=> of_dirac) assn in
     if domm det_assn == domm assn then
       bind: rn' <- intern rn det_assn;
@@ -218,8 +488,8 @@ Fixpoint inline_loop (rn : renaming) (c : com) : M (renaming * com) :=
       let assn1 := mapm (fun pe => sample: e <- pe; dirac (subst_zexpr (ZVar \o rn0) e)) assn in
       let rn1   := updm rn0 (mkfmapf id (domm assn1)) in
       bind: (rn', c') <- inline_loop rn c;
-      ret (rn', Assn assn0 (Assn assn1 c'))
-  | If e cthen celse c =>
+      ret (rn', CAssn assn0 (CAssn assn1 c'))
+  | CIf e cthen celse c =>
     let e' := subst_bexpr (ZVar \o rn) e in
     bind: (rn_then, cthen') <- inline_loop rn cthen;
     bind: (rn_else, celse') <- inline_loop rn celse;
@@ -227,20 +497,20 @@ Fixpoint inline_loop (rn : renaming) (c : com) : M (renaming * com) :=
     let updated v := (rn_then v != rn v) || (rn_else v != rn v) in
     let to_flush1 := fset_filter updated to_flush0 in
     match cthen', celse' with
-    | Skip, Skip =>
+    | CSkip, CSkip =>
       let merge v := ZTest e' (ZVar (rn_then v)) (ZVar (rn_else v)) in
       bind: rn' <- intern rn (mkfmapf merge to_flush1);
       inline_loop rn' c
     | _, _ =>
       let assn_then := mkfmapf (dirac \o ZVar \o rn_then) to_flush1 in
-      let cthen''   := Seq cthen' (Assn assn_then Skip) in
+      let cthen''   := Seq cthen' (CAssn assn_then CSkip) in
       let assn_else := mkfmapf (dirac \o ZVar \o rn_else) to_flush1 in
-      let celse''   := Seq celse' (Assn assn_else Skip) in
+      let celse''   := Seq celse' (CAssn assn_else CSkip) in
       let rn_merge  := updm rn (mkfmapf id to_flush1) in
       bind: (rn', c') <- inline_loop rn_merge c;
-      ret (rn', If e' cthen'' celse'' c')
+      ret (rn', CIf e' cthen'' celse'' c')
     end
-  | Block vs c1 c2 =>
+  | CBlock vs c1 c2 =>
     bind: to_flush0 <- conflicts rn vs;
     let assn0 := mkfmapf (dirac \o ZVar \o rn) to_flush0 in
     let rn0 := updm rn (mkfmapf id (to_flush0 :|: vs)) in
@@ -249,13 +519,21 @@ Fixpoint inline_loop (rn : renaming) (c : com) : M (renaming * com) :=
     let assn1 := mkfmapf (dirac \o ZVar \o rn1) to_flush1 in
     let rn1'  := updm rn1 (mkfmapf id to_flush1) in
     bind: (rn2, c2') <- inline_loop rn1' c2;
-    ret (rn2, Assn assn0 (Block vs c1 c2))
+    ret (rn2, CAssn assn0 (CBlock vs c1 c2))
   end.
 
-Lemma inline_loopP rn c st :
-  inline_loop rn c = (rn', c') ->
-  run (eval_forms f) c (updm st (mkfmapf (eval_forms f \o rn) (supp rn))) =
-  sample:
+Lemma inline_loopP rn rn' c c' ist ist' st :
+  inline_loop rn c ist = (ist', (rn', c')) ->
+  run id c (state_view st rn ist') =
+  sample: st' <- run (eval_forms (formulas ist')) c' st;
+  dirac (state_view st' rn' ist).
+Proof.
+elim: c rn rn' c' ist ist' st.
+- move=> /= rn _ _ ist _ st [<- <- <-] /=.
+  by rewrite sample_diracL.
+- move=> /= assn c IH rn rn' c' ist ist' st.
+  set det_assn := filter_map _ _; case: ifP=> [/eqP edomm|_].
+  +
 
 Definition spec T (P : istate → Prop) (x : M T) (Q : T → istate → Prop) : Prop :=
   ∀ s, P s → Q (x s).2 (x s).1.
@@ -273,9 +551,7 @@ Fixpoint com_read_vars c : {fset var} :=
   | Skip =>
     fset0
   | Assn assn c =>
-    com_read_vars c :|:
-    \bigcup_(pe <- codomm assn)
-    \bigcup_(e  <- supp pe) zexpr_vars e
+    assn_vars assn :|: com_read_vars c
   | If be cthen celse c =>
     bexpr_vars be :|:
     com_read_vars cthen :|:

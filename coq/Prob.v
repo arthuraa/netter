@@ -2,7 +2,7 @@ Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice seq
-  ssrint rat ssralg ssrnum bigop.
+  ssrint rat ssralg ssrnum bigop path.
 
 From extructures Require Import ord fset fmap ffun.
 
@@ -10,36 +10,11 @@ From void Require Import void.
 
 From deriving Require Import deriving.
 
+From RandC Require Import Extra.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-(* MOVE *)
-Lemma val_fset_filter (T : ordType) (P : T -> bool) (X : {fset T}) :
-  fset_filter P X = filter P X :> seq T.
-Proof.
-apply: (path.eq_sorted (@Ord.lt_trans T)).
-- move=> x y /andP [/Ord.ltW xy /Ord.ltW yx].
-  by apply: Ord.anti_leq; rewrite xy.
-- rewrite /fset_filter /fset unlock /=.
-  exact: FSet.fset_subproof.
-- rewrite path.sorted_filter ?valP //.
-  exact: Ord.lt_trans.
-rewrite uniq_perm ?filter_uniq ?uniq_fset //.
-by move=> x; rewrite /= in_fset_filter mem_filter.
-Qed.
-
-Arguments bigcupP {_ _ _ _ _ _}.
-Arguments mkfmap {_ _}.
-Arguments suppPn {_ _ _ _ _}.
-(* /MOVE *)
-
-
-Axiom int_ordMixin : Ord.mixin_of int.
-Canonical int_ordType := Eval hnf in OrdType int int_ordMixin.
-
-Definition rat_ordMixin := [ordMixin of rat by <:].
-Canonical rat_ordType := Eval hnf in OrdType rat rat_ordMixin.
 
 Local Open Scope ring_scope.
 Local Open Scope fset_scope.
@@ -313,6 +288,8 @@ Qed.
 
 End Sample.
 
+Arguments supp_sampleP {_ _ _ _ _}.
+
 Declare Scope prob_scope.
 Local Open Scope prob_scope.
 
@@ -356,6 +333,14 @@ move=> efg; apply/eq_prob=> y.
 by rewrite !sampleE; apply/eq_big=> // x _; rewrite efg.
 Qed.
 
+Lemma eq_in_sample (p : {prob T}) (f g : T -> {prob S}) :
+  {in supp p, f =1 g} -> sample p f = sample p g.
+Proof.
+move=> efg; apply/eq_prob=> y.
+rewrite !sampleE big_seq [in RHS]big_seq.
+by apply/eq_big=> // x /efg ->.
+Qed.
+
 End SampleProps.
 
 Lemma sampleA (T S R : ordType) p (f : T -> {prob S}) (g : S -> {prob R}) :
@@ -392,8 +377,168 @@ Fixpoint map_p T (S : ordType) (f : T -> {prob S}) (xs : seq T) : {prob seq S} :
     dirac (y :: ys)
   end.
 
-Definition mapim_p (T : ordType) (S : Type) (R : ordType)
+Lemma eq_map_p T (S : ordType) (f g : T -> {prob S}) :
+  f =1 g -> map_p f =1 map_p g.
+Proof. by move=> fg; elim=> //= x xs IH; rewrite fg IH. Qed.
+
+Lemma map_p_dirac (T : ordType) (xs : seq T) : map_p dirac xs = dirac xs.
+Proof.
+elim: xs=> //= x xs IH.
+by rewrite sample_diracL IH sample_diracL.
+Qed.
+
+Lemma map_p_comp T S (R : ordType) (f : T -> S) (g : S -> {prob R}) xs :
+  map_p g [seq f x | x <- xs] = map_p (g \o f) xs.
+Proof. by elim: xs=> //= x xs ->. Qed.
+
+Lemma supp_map_p T (S : ordType) (f : T -> {prob S}) xs ys :
+  ys \in supp (map_p f xs) =
+  all2 (fun x y => y \in supp (f x)) xs ys.
+Proof.
+elim: xs ys=> [|x xs IH] [|y ys] /=.
+- by rewrite supp_dirac.
+- by rewrite supp_dirac.
+- case: supp_sampleP=> //=.
+  by case=> y' y'P /supp_sampleP [ys' _ /supp_diracP].
+- rewrite -IH; apply/(sameP supp_sampleP)/(iffP andP).
+  + case=> [yP ysP]; exists y=> //.
+    apply/supp_sampleP; exists ys=> //.
+    by apply/supp_diracP.
+  + by case=> [y' y'P /supp_sampleP [ys' ys'P /supp_diracP [-> ->]]].
+Qed.
+
+Section MapMapProb.
+
+Variable T : ordType.
+
+Definition mapim_p (S : Type) (R : ordType)
   (f : T -> S -> {prob R}) (m : {fmap T -> S}) : {prob {fmap T -> R}} :=
   let do_pair p := sample: y <- f p.1 p.2; dirac (p.1, y) in
   sample: pairs <- map_p do_pair (val m);
   dirac (mkfmap pairs).
+
+Lemma eq_mapim_p (S : Type) (R : ordType)
+  (f g : T -> S -> {prob R}) :
+  f =2 g -> mapim_p f =1 mapim_p g.
+Proof.
+move=> fg m; rewrite /mapim_p.
+by under eq_map_p => p do rewrite fg.
+Qed.
+
+Lemma mapim_p_dirac (S : ordType) (m : {fmap T -> S}) :
+  mapim_p (fun _ => dirac) m = dirac m.
+Proof.
+rewrite /mapim_p.
+under eq_map_p => p do rewrite sample_diracL -surjective_pairing.
+by rewrite map_p_dirac sample_diracL fmvalK.
+Qed.
+
+Lemma mapim_p_comp (S R U : ordType)
+  (g : T -> R -> {prob U}) (f : T -> S -> R) m :
+  mapim_p g (mapim f m) =
+  mapim_p (fun x y => g x (f x y)) m.
+Proof. by rewrite /mapim_p /= map_p_comp. Qed.
+
+Fact mapm_p_key : unit. Proof. exact: tt. Qed.
+
+Definition mapm_p (S : Type) (R : ordType) (f : S -> {prob R}) :=
+  locked_with mapm_p_key (mapim_p (fun (x : T) => f)).
+
+Lemma eq_mapm_p (S : Type) (R : ordType) (f g : S -> {prob R}) :
+  f =1 g -> mapm_p f =1 mapm_p g.
+Proof.
+rewrite /mapm_p !unlock.
+by move=> e; apply/eq_mapim_p=> ??; eauto.
+Qed.
+
+Lemma mapm_p_dirac (S : ordType) (m : {fmap T -> S}) :
+  mapm_p dirac m = dirac m.
+Proof. rewrite /mapm_p !unlock; exact/mapim_p_dirac. Qed.
+
+Lemma mapm_p_comp (S R U : ordType) (g : R -> {prob U}) (f : S -> R) m :
+  mapm_p g (mapm f m) = mapm_p (g \o f) m.
+Proof. rewrite /mapm_p !unlock; exact/mapim_p_comp. Qed.
+
+Lemma supp_mapm_p (S R : ordType) (f : S -> {prob R}) m1 m2 :
+  m2 \in supp (mapm_p f m1) =
+  (domm m1 == domm m2) &&
+  all (fun x => match m1 x, m2 x with
+                | Some y, Some z => z \in supp (f y)
+                | _, _ => true
+                end) (domm m1).
+Proof.
+rewrite /mapm_p unlock /mapim_p.
+apply/(sameP supp_sampleP)/(iffP andP).
+- case=> /eqP edomm ecodomm; exists (val m2); last first.
+    by apply/supp_diracP; rewrite fmvalK.
+  have /= esize: size (val m1) = size (val m2).
+    move/(congr1 (size \o val)): edomm.
+    by rewrite /= !val_domm !size_map => ->.
+  rewrite supp_map_p all2E esize eqxx /=.
+  apply/allP=> /= - xyz /(nthP xyz) [i].
+  rewrite size_zip -esize minnn=> isize.
+  case: xyz=> [[x1 y] [x2 z]]; rewrite nth_zip //=; case=> e1 e2.
+  have e1' : nth x1 (domm m1) i = x1.
+    by rewrite val_domm (nth_map (x1, y)) // e1.
+  have e2' : nth x2 (domm m2) i = x2.
+    by rewrite val_domm (nth_map (x2, z)) -?esize // e2.
+  have ex: x1 = x2.
+    rewrite -e1' -e2' -edomm; apply/set_nth_default.
+    by rewrite val_domm size_map.
+  move: x1 ex e1 e2 {e1' e2'}=> {x2} x <- e1 e2.
+  have {}e1: m1 x = Some y.
+    by apply/getmP; rewrite -e1; apply/mem_nth.
+  have {}e2: m2 x = Some z.
+    by apply/getmP; rewrite -e2; apply/mem_nth; rewrite -esize.
+  have xP: x \in domm m1 by rewrite mem_domm e1.
+  move/allP/(_ _ xP): ecodomm; rewrite e1 e2=> yz.
+  by apply/supp_sampleP; exists z; rewrite // supp_dirac in_fset1 eqxx.
+- case=> {}m2 m2P /supp_diracP ->.
+  move: m2P; rewrite supp_map_p all2E; case/andP=> /eqP esize ecodomm.
+  have edomm : unzip1 m1 = unzip1 m2.
+    move: m2 esize ecodomm; rewrite /=.
+    elim: {m1} (val m1)=> [|[x1 y] m1 IH] [|[x2 z] m2] //= [esize].
+    case/andP=> /supp_sampleP [{}z _ /supp_diracP [-> _]] ecodomm.
+    congr cons; exact: IH.
+  have m2_sorted: mkfmap m2 = m2 :> seq _.
+    apply/mkfmapK; rewrite -edomm; exact: (valP m1).
+  have {}edomm : domm m1 = domm (mkfmap m2).
+    by apply/val_inj; rewrite /= !val_domm m2_sorted.
+  split; first by rewrite edomm.
+  move: esize ecodomm; rewrite -m2_sorted.
+  move: (mkfmap m2) edomm=> {m2_sorted} {}m2 /= edomm esize ecodomm.
+  apply/allP=> x /dommP [y yP]; rewrite yP fmvalK.
+  have /dommP [z zP]: x \in domm m2 by rewrite -edomm mem_domm yP.
+  rewrite zP.
+  case/getmP/(nthP (x, y)): (yP)=> /= i isize ei1.
+  have ei1domm : nth x (domm m1) i = x.
+    by rewrite val_domm (nth_map (x, y)) // ei1.
+  have ei2: nth (x, z) m2 i = (x, z).
+    move: zP; rewrite -{1} ei1domm edomm.
+    rewrite (getm_nth (x, z)) -?esize //; case=> {2}<-.
+    move: ei1domm; rewrite edomm val_domm (nth_map (x, z)) -?esize //.
+    by move=> e; rewrite -[X in _ = (X, _)]e [LHS]surjective_pairing.
+  have inzip : nth ((x, y), (x, z)) (zip m1 m2) i = ((x, y), (x, z)).
+    by rewrite nth_zip // ei1 ei2.
+  have {}inzip: ((x, y), (x, z)) \in zip m1 m2.
+    by rewrite -inzip; apply/mem_nth; rewrite size_zip -esize minnn.
+  move/allP/(_ _ inzip): ecodomm; rewrite inE /=.
+  by case/supp_sampleP=> ?? /supp_diracP [->].
+Qed.
+
+Lemma supp_mapm_pP (S R : ordType) (f : S -> {prob R}) m1 m2 :
+  reflect (domm m1 = domm m2 /\
+           forall x y z, m1 x = Some y -> m2 x = Some z -> z \in supp (f y))
+          (m2 \in supp (mapm_p f m1)).
+Proof.
+rewrite supp_mapm_p; apply/(iffP andP).
+- case=> /eqP edomm ecodomm; split=> // x y z yP zP.
+  have xP: x \in domm m1 by rewrite mem_domm yP.
+  by move/allP/(_ _ xP): ecodomm; rewrite yP zP.
+- case=> edomm ecodomm; split; first by rewrite edomm.
+  apply/allP=> x xP; case/dommP: (xP)=> y yP.
+  move: (xP); rewrite edomm; case/dommP=> z zP.
+  rewrite yP zP; apply: ecodomm yP zP.
+Qed.
+
+End MapMapProb.

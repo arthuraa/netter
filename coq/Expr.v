@@ -1,8 +1,8 @@
 Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice ssrint
-  rat ssralg ssrnum.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice 
+  seq ssrint rat ssralg ssrnum.
 
 From extructures Require Import ord fset.
 
@@ -156,6 +156,47 @@ with subst_qexpr f qe : qexpr :=
   | QOfZ ze => QOfZ (subst_zexpr f ze)
   end.
 
+Ltac solve_subst_exprP :=
+  match goal with
+  | [e : ?x = ?y |- context[?x]] =>
+    rewrite {}e
+  end.
+
+Lemma subst_exprP f g :
+  (forall e,
+      eval_bexpr f (subst_bexpr g e) =
+      eval_bexpr (fun v => eval_zexpr f (g v)) e) /\
+  (forall e,
+      eval_zexpr f (subst_zexpr g e) =
+      eval_zexpr (fun v => eval_zexpr f (g v)) e) /\
+  (forall e,
+      eval_qexpr f (subst_qexpr g e) =
+      eval_qexpr (fun v => eval_zexpr f (g v)) e).
+Proof.
+apply: expr_ind=> //=; try by (move=> *; repeat solve_subst_exprP).
+Qed.
+
+Lemma subst_bexprP f g e :
+  eval_bexpr f (subst_bexpr g e) =
+  eval_bexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
+Lemma subst_zexprP f g e :
+  eval_zexpr f (subst_zexpr g e) =
+  eval_zexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
+Lemma subst_qexprP f g e :
+  eval_qexpr f (subst_qexpr g e) =
+  eval_qexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
 End Eval.
 
 Axiom bexpr_eqMixin : Equality.mixin_of bexpr.
@@ -201,7 +242,7 @@ with qexpr_vars qe :=
   | QOfZ ze          => zexpr_vars ze
   end.
 
-Ltac solve_expr_varsP :=
+Ltac solve_eq_in_eval_exprP :=
   move=> *;
   repeat match goal with
          | [H : is_true (fsubset (_ :|: _) _) |- _] =>
@@ -220,7 +261,7 @@ Ltac solve_expr_varsP :=
 
 Implicit Types V : {fset var}.
 
-Lemma expr_varsP V f g :
+Lemma eq_in_eval_exprP V f g :
   {in V, f =1 g} ->
   (forall be, fsubset (bexpr_vars be) V ->
               eval_bexpr f be = eval_bexpr g be) /\
@@ -229,18 +270,34 @@ Lemma expr_varsP V f g :
   (forall qe, fsubset (qexpr_vars qe) V ->
               eval_qexpr f qe = eval_qexpr g qe).
 Proof.
-move=> efg; apply: expr_ind=> //=; try by solve_expr_varsP.
+move=> efg; apply: expr_ind=> //=; try by solve_eq_in_eval_exprP.
 move=> v; rewrite fsub1set; exact: efg.
 Qed.
 
-Lemma bexpr_varsP V f g :
+Lemma eq_in_eval_bexprP V f g :
   {in V, f =1 g} ->
-  forall ze, fsubset (bexpr_vars ze) V ->
-  eval_bexpr f ze = eval_bexpr g ze.
-Proof. by move=> /expr_varsP [? [? ?]]. Qed.
+  forall e, fsubset (bexpr_vars e) V ->
+  eval_bexpr f e = eval_bexpr g e.
+Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
 
-Lemma zexpr_varsP V f g :
+Lemma eq_in_eval_zexprP V f g :
   {in V, f =1 g} ->
-  forall ze, fsubset (zexpr_vars ze) V ->
-  eval_zexpr f ze = eval_zexpr g ze.
-Proof. by move=> /expr_varsP [? [? ?]]. Qed.
+  forall e, fsubset (zexpr_vars e) V ->
+  eval_zexpr f e = eval_zexpr g e.
+Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
+
+Lemma eq_eval_bexpr f g :
+  f =1 g ->
+  forall e, eval_bexpr f e = eval_bexpr g e.
+Proof.
+move=> fg ?; apply: eq_in_eval_bexprP (fsubsetxx _).
+move=> ??; exact: fg.
+Qed.
+
+Lemma eq_eval_zexpr f g :
+  f =1 g ->
+  forall e, eval_zexpr f e = eval_zexpr g e.
+Proof.
+move=> fg ?; apply: eq_in_eval_zexprP (fsubsetxx _).
+move=> ??; exact: fg.
+Qed.
