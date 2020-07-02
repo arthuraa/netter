@@ -10,6 +10,8 @@ From void Require Import void.
 
 From deriving Require Import deriving.
 
+From RandC Require Import Extra.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -26,6 +28,27 @@ Definition var_choiceMixin := [derive choiceMixin for var].
 Canonical var_choiceType := Eval hnf in ChoiceType var var_choiceMixin.
 Definition var_ordMixin := Eval simpl in [derive ordMixin for var].
 Canonical var_ordType := OrdType var var_ordMixin.
+
+Inductive symbol :=
+| SVar of var
+| SFor of nat.
+
+Coercion SVar : var >-> symbol.
+
+Definition var_of_sym (s : symbol) : option var :=
+  if s is SVar v then Some v else None.
+
+Lemma SVarK : pcancel SVar var_of_sym.
+Proof. by case. Qed.
+
+Definition symbol_indMixin := [indMixin for symbol_rect].
+Canonical symbol_indType := Eval hnf in IndType _ symbol symbol_indMixin.
+Definition symbol_eqMixin := [derive eqMixin for symbol].
+Canonical symbol_eqType := Eval hnf in EqType symbol symbol_eqMixin.
+Definition symbol_choiceMixin := [derive choiceMixin for symbol].
+Canonical symbol_choiceType := Eval hnf in ChoiceType symbol symbol_choiceMixin.
+Definition symbol_ordMixin := [derive ordMixin for symbol].
+Canonical symbol_ordType := Eval hnf in OrdType symbol symbol_ordMixin.
 
 Inductive comp_op :=
 | Leq
@@ -57,7 +80,7 @@ Inductive bexpr :=
 | BNot   of bexpr
 
 with zexpr :=
-| ZVar   of var
+| ZSym   of symbol
 | ZConst of int
 | ZTest  of bexpr & zexpr & zexpr
 | ZArith of arith_op & zexpr & zexpr
@@ -105,7 +128,7 @@ Fixpoint eval_bexpr f be : bool :=
 
 with eval_zexpr f ze : int :=
   match ze with
-  | ZVar v => f v
+  | ZSym v => f v
   | ZConst n => n
   | ZTest be ze1 ze2 => if eval_bexpr f be then eval_zexpr f ze1
                         else eval_zexpr f ze2
@@ -141,7 +164,7 @@ Fixpoint subst_bexpr f be : bexpr :=
 
 with subst_zexpr f ze : zexpr :=
   match ze with
-  | ZVar v => f v
+  | ZSym v => f v
   | ZConst _ => ze
   | ZTest be ze1 ze2 => ZTest (subst_bexpr f be) (subst_zexpr f ze1) (subst_zexpr f ze2)
   | ZArith o ze1 ze2 => ZArith o (subst_zexpr f ze1) (subst_zexpr f ze2)
@@ -212,34 +235,34 @@ Canonical zexpr_choiceType := Eval hnf in ChoiceType zexpr zexpr_choiceMixin.
 Axiom zexpr_ordMixin : Ord.mixin_of zexpr.
 Canonical zexpr_ordType := Eval hnf in OrdType zexpr zexpr_ordMixin.
 
-Fixpoint bexpr_vars be :=
+Fixpoint bexpr_syms be :=
   match be with
   | BConst _         => fset0
-  | BEqB be1 be2     => bexpr_vars be1 :|: bexpr_vars be2
-  | BEqZ ze1 ze2     => zexpr_vars ze1 :|: zexpr_vars ze2
-  | BEqQ qe1 qe2     => qexpr_vars qe1 :|: qexpr_vars qe2
-  | BTest be be1 be2 => bexpr_vars be  :|: bexpr_vars be1 :|: bexpr_vars be2
-  | BCompZ _ ze1 ze2 => zexpr_vars ze1 :|: zexpr_vars ze2
-  | BCompQ _ qe1 qe2 => qexpr_vars qe1 :|: qexpr_vars qe2
-  | BLogOp _ be1 be2 => bexpr_vars be1 :|: bexpr_vars be2
-  | BNot be          => bexpr_vars be
+  | BEqB be1 be2     => bexpr_syms be1 :|: bexpr_syms be2
+  | BEqZ ze1 ze2     => zexpr_syms ze1 :|: zexpr_syms ze2
+  | BEqQ qe1 qe2     => qexpr_syms qe1 :|: qexpr_syms qe2
+  | BTest be be1 be2 => bexpr_syms be  :|: bexpr_syms be1 :|: bexpr_syms be2
+  | BCompZ _ ze1 ze2 => zexpr_syms ze1 :|: zexpr_syms ze2
+  | BCompQ _ qe1 qe2 => qexpr_syms qe1 :|: qexpr_syms qe2
+  | BLogOp _ be1 be2 => bexpr_syms be1 :|: bexpr_syms be2
+  | BNot be          => bexpr_syms be
   end
 
-with zexpr_vars ze :=
+with zexpr_syms ze :=
   match ze with
-  | ZVar v           => fset1 v
+  | ZSym v           => fset1 v
   | ZConst _         => fset0
-  | ZTest be ze1 ze2 => bexpr_vars be  :|: zexpr_vars ze1 :|: zexpr_vars ze2
-  | ZArith _ ze1 ze2 => zexpr_vars ze1 :|: zexpr_vars ze2
-  | ZTrunc _ qe      => qexpr_vars qe
+  | ZTest be ze1 ze2 => bexpr_syms be  :|: zexpr_syms ze1 :|: zexpr_syms ze2
+  | ZArith _ ze1 ze2 => zexpr_syms ze1 :|: zexpr_syms ze2
+  | ZTrunc _ qe      => qexpr_syms qe
   end
 
-with qexpr_vars qe :=
+with qexpr_syms qe :=
   match qe with
   | QConst _         => fset0
-  | QTest be qe1 qe2 => bexpr_vars be  :|: qexpr_vars qe1 :|: qexpr_vars qe2
-  | QArith _ qe1 qe2 => qexpr_vars qe1 :|: qexpr_vars qe2
-  | QOfZ ze          => zexpr_vars ze
+  | QTest be qe1 qe2 => bexpr_syms be  :|: qexpr_syms qe1 :|: qexpr_syms qe2
+  | QArith _ qe1 qe2 => qexpr_syms qe1 :|: qexpr_syms qe2
+  | QOfZ ze          => zexpr_syms ze
   end.
 
 Ltac solve_eq_in_eval_exprP :=
@@ -259,15 +282,15 @@ Ltac solve_eq_in_eval_exprP :=
            end
          end.
 
-Implicit Types V : {fset var}.
+Implicit Types V : {fset symbol}.
 
 Lemma eq_in_eval_exprP V f g :
   {in V, f =1 g} ->
-  (forall be, fsubset (bexpr_vars be) V ->
+  (forall be, fsubset (bexpr_syms be) V ->
               eval_bexpr f be = eval_bexpr g be) /\
-  (forall ze, fsubset (zexpr_vars ze) V ->
+  (forall ze, fsubset (zexpr_syms ze) V ->
               eval_zexpr f ze = eval_zexpr g ze) /\
-  (forall qe, fsubset (qexpr_vars qe) V ->
+  (forall qe, fsubset (qexpr_syms qe) V ->
               eval_qexpr f qe = eval_qexpr g qe).
 Proof.
 move=> efg; apply: expr_ind=> //=; try by solve_eq_in_eval_exprP.
@@ -276,13 +299,13 @@ Qed.
 
 Lemma eq_in_eval_bexprP V f g :
   {in V, f =1 g} ->
-  forall e, fsubset (bexpr_vars e) V ->
+  forall e, fsubset (bexpr_syms e) V ->
   eval_bexpr f e = eval_bexpr g e.
 Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
 
 Lemma eq_in_eval_zexprP V f g :
   {in V, f =1 g} ->
-  forall e, fsubset (zexpr_vars e) V ->
+  forall e, fsubset (zexpr_syms e) V ->
   eval_zexpr f e = eval_zexpr g e.
 Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
 
@@ -301,3 +324,57 @@ Proof.
 move=> fg ?; apply: eq_in_eval_zexprP (fsubsetxx _).
 move=> ??; exact: fg.
 Qed.
+
+Definition formulas := seq (nat * zexpr).
+
+Fixpoint feval_forms (defs : formulas) st (f : nat) : int :=
+  if defs is (f', e) :: fs then
+    if f' == f then
+      let eval s := match s with
+                    | SVar v => st v
+                    | SFor f => feval_forms fs st f
+                    end in
+      eval_zexpr eval e
+    else feval_forms fs st f
+  else 0.
+
+Definition feval_sym defs st s : int :=
+  match s with
+  | SVar v => st v
+  | SFor f => feval_forms defs st f
+  end.
+
+Fixpoint formula_vars (defs : formulas) (f : nat) : {fset var} :=
+  if defs is (f', e) :: defs then
+    if f' == f then
+      \bigcup_(s <- zexpr_syms e)
+         match s with
+         | SVar v   => fset1 v
+         | SFor f'' => formula_vars defs f''
+         end
+    else formula_vars defs f
+  else fset0.
+
+Definition sym_vars defs s : {fset var} :=
+  match s with
+  | SVar v => fset1 v
+  | SFor f => formula_vars defs f
+  end.
+
+Definition feval_bexpr defs st e :=
+  eval_bexpr (feval_sym defs st) e.
+
+Definition feval_zexpr defs st e :=
+  eval_zexpr (feval_sym defs st) e.
+
+Definition feval_qexpr defs st e :=
+  eval_qexpr (feval_sym defs st) e.
+
+Definition bexpr_vars defs e :=
+  \bigcup_(s <- bexpr_syms e) sym_vars defs s.
+
+Definition zexpr_vars defs e :=
+  \bigcup_(s <- zexpr_syms e) sym_vars defs s.
+
+Definition qexpr_vars defs e :=
+  \bigcup_(s <- qexpr_syms e) sym_vars defs s.

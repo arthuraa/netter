@@ -169,6 +169,11 @@ Qed.
 Lemma supp_diracP x x' : reflect (x' = x) (x' \in supp (dirac x)).
 Proof. rewrite supp_dirac; exact: fset1P. Qed.
 
+Lemma dirac_inj : injective dirac.
+Proof.
+by move=> x y e; apply/fset1_inj; rewrite -!supp_dirac e.
+Qed.
+
 Lemma eq_prob (p1 p2 : {prob T}) : p1 =1 p2 <-> p1 = p2.
 Proof. by split=> [/eq_distr/val_inj|-> //]. Qed.
 
@@ -223,6 +228,7 @@ Notation "{ 'prob' T }" := (prob_of (Phant T))
 
 Arguments dirac {_} x.
 Arguments of_dirac {_} p.
+Arguments dirac_inj {_}.
 
 Section Sample.
 
@@ -341,6 +347,14 @@ rewrite !sampleE big_seq [in RHS]big_seq.
 by apply/eq_big=> // x /efg ->.
 Qed.
 
+Lemma sample_const (px : {prob T}) (py : {prob S}) :
+  (sample: _ <- px; py) = py.
+Proof.
+apply/eq_prob=> y.
+rewrite sampleE -GRing.mulr_suml -[RHS]GRing.mul1r; congr *%R.
+exact/eqP/(valP px).
+Qed.
+
 End SampleProps.
 
 Lemma sampleA (T S R : ordType) p (f : T -> {prob S}) (g : S -> {prob R}) :
@@ -366,7 +380,25 @@ apply/eq_big=> // y _; rewrite mem_supp.
 by case: eqP=> //= ->; rewrite GRing.mul0r.
 Qed.
 
+Lemma sampleC (T S R : ordType) (p1 : {prob T}) (p2 : {prob S}) (f : T -> S -> {prob R}) :
+  (sample: x <- p1; sample: y <- p2; f x y) =
+  (sample: y <- p2; sample: x <- p1; f x y).
+Proof.
+apply/eq_prob=> z; rewrite !sampleE.
+under eq_big => [x|x _]; first over.
+  rewrite sampleE GRing.mulr_sumr; over.
+under [in RHS]eq_big=> [y|y _]; first over.
+  rewrite sampleE GRing.mulr_sumr.
+  under eq_big=> [x|x _]; first over.
+    rewrite GRing.mulrA [p2 _ * _]GRing.mulrC -GRing.mulrA; over.
+  over.
+by rewrite /= exchange_big.
+Qed.
+
 Open Scope prob_scope.
+
+Definition foldrM T (S : ordType) (f : T -> S -> {prob S}) (y : S) (xs : seq T) : {prob S} :=
+  foldr (fun x p => sample p (f x)) (dirac y) xs.
 
 Fixpoint map_p T (S : ordType) (f : T -> {prob S}) (xs : seq T) : {prob seq S} :=
   match xs with
@@ -390,6 +422,18 @@ Qed.
 Lemma map_p_comp T S (R : ordType) (f : T -> S) (g : S -> {prob R}) xs :
   map_p g [seq f x | x <- xs] = map_p (g \o f) xs.
 Proof. by elim: xs=> //= x xs ->. Qed.
+
+Lemma map_p_sample (T S R : ordType) (g : S -> {prob R}) (f : T -> {prob S}) (xs : seq T) :
+  map_p (fun x => sample: y <- f x; g y) xs =
+  sample: ys <- map_p f xs; map_p g ys.
+Proof.
+elim: xs=> [|x xs IH] /=; first by rewrite sample_diracL.
+rewrite !sampleA; apply/eq_sample=> y.
+rewrite sampleA {}IH.
+under eq_sample=> z do rewrite sampleA.
+under [in RHS]eq_sample=> zs do rewrite sample_diracL /=.
+by rewrite sampleC.
+Qed.
 
 Lemma supp_map_p T (S : ordType) (f : T -> {prob S}) xs ys :
   ys \in supp (map_p f xs) =
@@ -417,6 +461,18 @@ Definition mapim_p (S : Type) (R : ordType)
   sample: pairs <- map_p do_pair (val m);
   dirac (mkfmap pairs).
 
+Lemma mapim_pE S R f m :
+  @mapim_p S R f m =
+  foldrM (fun p m => sample: z <- f p.1 p.2; dirac (setm m p.1 z)) emptym m.
+Proof.
+rewrite /mapim_p /=.
+elim: (val m)=> {m} [|[x y] m /= IH] //=.
+- by rewrite sample_diracL //.
+- rewrite !sampleA [in RHS]sampleC; apply/eq_sample=> z.
+  rewrite sample_diracL sampleA -IH sampleA.
+  by apply/eq_sample=> pairs; rewrite !sample_diracL.
+Qed.
+
 Lemma eq_mapim_p (S : Type) (R : ordType)
   (f g : T -> S -> {prob R}) :
   f =2 g -> mapim_p f =1 mapim_p g.
@@ -443,6 +499,23 @@ Fact mapm_p_key : unit. Proof. exact: tt. Qed.
 
 Definition mapm_p (S : Type) (R : ordType) (f : S -> {prob R}) :=
   locked_with mapm_p_key (mapim_p (fun (x : T) => f)).
+
+Lemma mapm_pE S R f m :
+  @mapm_p S R f m =
+  if splitm m is Some (x, y, m) then
+    sample: z <- f y;
+    sample: m <- mapm_p f m;
+    dirac (setm m x z)
+  else dirac emptym.
+Proof.
+rewrite /splitm /= /mapm_p unlock /mapim_p /=.
+move: (valP m) => /=; case: (val m)=> [|[x y] ps] //=.
+  by rewrite sample_diracL.
+move=> /path_sorted psP.
+rewrite !sampleA; apply/eq_sample=> z.
+rewrite sample_diracL !sampleA mkfmapK //.
+by apply/eq_sample=> /= ps'; rewrite !sample_diracL.
+Qed.
 
 Lemma eq_mapm_p (S : Type) (R : ordType) (f g : S -> {prob R}) :
   f =1 g -> mapm_p f =1 mapm_p g.
@@ -541,4 +614,156 @@ rewrite supp_mapm_p; apply/(iffP andP).
   rewrite yP zP; apply: ecodomm yP zP.
 Qed.
 
+Lemma mapm_p0 (S R : ordType) f : @mapm_p S R f emptym = dirac emptym.
+Proof. by rewrite mapm_pE /=. Qed.
+
+Lemma mapm_p_setm (S R : ordType) f m x y :
+  @mapm_p S R f (setm m x y) =
+  sample: m <- mapm_p f m;
+  sample: z  <- f y;
+  dirac (setm m x z).
+Proof.
+rewrite /mapm_p unlock !mapim_pE [setm m x y]/setm /=.
+case: m=> /=; elim=> [|[x' y'] m IH] //=.
+case: Ord.ltgtP=> [//|xx'|{x'} <-] //= mP.
+  rewrite IH ?(path_sorted mP) //.
+  rewrite !sampleA; apply/eq_sample=> /= m'.
+  rewrite sampleC sampleA; apply/eq_sample=> /= z.
+  rewrite sampleA sample_diracL; apply/eq_sample=> /= z'.
+  rewrite sample_diracL setmC // eq_sym.
+  by case: Ord.ltgtP xx'.
+rewrite sampleA; apply/eq_sample=> m'.
+rewrite sampleC; apply/eq_sample=> z.
+rewrite sampleA.
+under eq_sample=> ? do rewrite sample_diracL setmxx.
+by rewrite sample_const.
+Qed.
+
+(*
+Lemma mapm_pE' (S R : ordType) f my mz :
+  @mapm_p S R f my mz =
+  if domm my == domm mz then
+    \prod_(x <- domm my)
+      (match my x, mz x with
+       | Some y, Some z => f y z
+       | _, _ => 0
+       end)
+  else 0.
+Proof.
+case: eqP=>[e|ne]; last first.
+  apply/suppPn/supp_mapm_pP; case=> ??; congruence.
+move ez: (domm mz) e=> X ey.
+elim/fset_ind: X my mz ey ez=> [|x X x_X IH] my mz ey ez.
+  move: ey ez=> /eqP/emptymP -> /eqP/emptymP ->.
+  by rewrite domm0 big_nil mapm_pE /= diracE.
+rewrite ey big_fsetU1 //=.
+have /dommP [y yP]: x \in domm my by rewrite ey in_fsetU1 eqxx.
+have /dommP [z zP]: x \in domm mz by rewrite ez in_fsetU1 eqxx.
+set my' := remm my x; set mz' := remm mz x.
+have e: (x |: X) :\ x = X.
+  apply/eq_fset=> x'; rewrite in_fsetD1 in_fsetU1.
+  by case: eqP=> [{x'}->|] //=; rewrite (negbTE x_X).
+have eyD: domm my' = X by rewrite domm_rem ey.
+have ezD: domm mz' = X by rewrite domm_rem ez.
+have {}ey: my = setm my' x y.
+  apply/eq_fmap=> x'; rewrite setmE remmE.
+  by case: eqP yP=> [->|].
+have {}ez: mz = setm mz' x z.
+  apply/eq_fmap=> x'; rewrite setmE remmE.
+  by case: eqP zP=> [->|].
+rewrite yP zP ey ez mapm_p_setm sampleE big_seq.
+under eq_big=> [m|m mP]; first over.
+  rewrite sampleE.
+  under eq_big=> [z'|z' z'P]; first over.
+    rewrite diracE eq_setm remmI ?ezD // remmI; last first.
+      by case/supp_mapm_pP: mP=> <- _; rewrite eyD.
+    over.
+  rewrite /=.
+rewrite (IH _ _ ey ez).
+
+have e: perm_eq (x |: X) (x :: X).
+  apply: uniq_perm.
+  - exact: uniq_fset.
+  - by rewrite /= x_X uniq_fset.
+  by move=> x'; rewrite inE in_fsetU1.
+rewrite ey (perm_big _ e) /= big_cons.
+
+move e: (size my)=> n; elim: n my mz e=> [|n IH] /= my mz.
+  rewrite sizeES mapm_pE [domm my]dommES.
+  case e: (splitm my)=> [[[x y] my']|] //= _.
+  by rewrite diracE -eq_domm0 eq_sym big_nil.
+rewrite sizeES mapm_pE [domm my]dommES.
+case ey: (splitm my)=> [[[x y] my']|] //= [e].
+rewrite sampleE [domm mz]dommES.
+case ez: (splitm mz)=> [[[x' z] mz']|]; last first.
+  rewrite eq_domm0.
+
+rewrite mapm_pE /= -[domm _ == domm _]val_eqE /= val_domm.
+(* FIXME: why doesn't under work here? *)
+have e: forall x, true -> match my x, mz x with
+                  | Some y, Some z => f y z
+                  | _ , _ => 0
+                  end =
+                  match getm_def (val my) x, mz x with
+                  | Some y, Some z => f y z
+                  | _, _ => 0
+                  end.
+  by move=> x; rewrite -mkfmapE fmvalK.
+rewrite (eq_big xpredT _ _ e) //= {e}.
+elim: (val my) mz=> /= {my} [|[x y] my IH] /= mz.
+  by rewrite big_nil diracE -eq_domm0 -val_eqE /= eq_sym.
+rewrite sampleE.
+*)
+
+Lemma mapm_p_sample (S R U : ordType) (g : R -> {prob U}) (f : S -> {prob R}) (m : {fmap T -> S}) :
+  mapm_p (fun x => sample: y <- f x; g y) m =
+  sample: m' <- mapm_p f m; mapm_p g m'.
+Proof.
+elim/fmap_ind: m=> [|m IH x y x_m]; first by rewrite !(mapm_p0, sample_diracL).
+rewrite !mapm_p_setm IH // !sampleA; apply/eq_sample=> m'.
+rewrite sampleA; under [in LHS]eq_sample=> ? do rewrite sampleA.
+rewrite sampleC; apply/eq_sample=> z.
+by rewrite sample_diracL mapm_p_setm sampleC.
+Qed.
+
 End MapMapProb.
+
+Section SampleFun.
+
+Variables (T : ordType) (S : ordType) (def : T -> S).
+
+Definition samplef (f : ffun (dirac \o def)) : {prob ffun def} :=
+  sample: m <- mapm_p id (val f);
+  dirac (mkffun (fun x => odflt (def x) (m x)) (domm m)).
+
+Lemma samplef0 : samplef emptyf = dirac emptyf.
+Proof.
+rewrite /samplef /= mapm_p0 sample_diracL; congr dirac.
+by apply/eq_ffun=> x; rewrite mkffunE /= domm0 /= emptyfE.
+Qed.
+
+Lemma samplef_map f : samplef (mapf dirac f) = dirac f.
+Proof.
+rewrite /samplef /= val_mapf; last exact: dirac_inj.
+rewrite mapm_p_comp mapm_p_dirac sample_diracL; congr dirac.
+apply/eq_ffun=> x; rewrite mkffunE /appf /= mem_domm.
+by case: (ffval f x).
+Qed.
+
+End SampleFun.
+
+Section MapFunProb.
+
+Variables (T S R : ordType) (def : T -> S).
+
+Definition mapf_p (g : S -> R) (f : ffun (dirac \o def)) : ffun (dirac \o g \o def) :=
+  mkffun (fun x => sample: y <- f x; dirac (g y)) (supp f).
+
+Lemma mapf_pE g f x :
+  mapf_p g f x = sample: y <- f x; dirac (g y).
+Proof.
+rewrite /mapf_p mkffunE mem_supp /=.
+by case: eqP=> //= ->; rewrite sample_diracL.
+Qed.
+
+End MapFunProb.

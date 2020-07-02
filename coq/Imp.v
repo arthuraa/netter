@@ -20,6 +20,8 @@ Local Open Scope fset_scope.
 Local Open Scope prob_scope.
 
 Local Notation assignment := {fmap var -> {prob zexpr}}.
+Local Notation subst := (ffun (fun v : var => ZSym v)).
+Local Notation state := (ffun (fun x : var => 0 : int)).
 
 Inductive com :=
 | CSkip
@@ -32,22 +34,48 @@ Canonical com_indType := IndType _ com com_indMixin.
 Definition com_eqMixin := [derive eqMixin for com].
 Canonical com_eqType := EqType com com_eqMixin.
 
-Local Notation state := (ffun (fun x : var => 0 : int)).
+Implicit Types (c : com) (assn : assignment) (σ : subst)
+  (st : state) (defs : formulas) (v : var).
 
-Implicit Types (c : com) (assn : assignment) (st : state) (φ : state → var → int).
+Definition app_subst σ s :=
+  if s is SVar v then σ v else ZSym s.
 
-Definition subst_assn f assn :=
-  mapm (fun pe => sample: e <- pe; dirac (subst_zexpr f e)) assn.
+Definition subst_comp σ1 σ2 : subst :=
+  mkffun (fun v => subst_zexpr (app_subst σ1) (σ2 v))
+         (supp σ1 :|: supp σ2).
 
-Definition assn_vars assn :=
+Lemma subst_compE σ1 σ2 v :
+  subst_comp σ1 σ2 v =
+  subst_zexpr (app_subst σ1) (σ2 v).
+Proof.
+rewrite /subst_comp mkffunE in_fsetU !mem_supp.
+case: eqP=> //= ev1; case: eqP=> //= ev2.
+by rewrite ev2 /= ev1.
+Qed.
+
+Definition subst_assn σ assn : assignment :=
+  mapm (fun pe => sample: e <- pe;
+                  dirac (subst_zexpr (app_subst σ) e))
+       assn.
+
+Lemma subst_assnE σ assn v :
+  subst_assn σ assn v =
+  omap (fun pe => sample: e <- pe; dirac (subst_zexpr (app_subst σ) e))
+       (assn v).
+Proof. by rewrite /subst_assn mapmE. Qed.
+
+Definition assn_vars defs assn :=
   \bigcup_(pe <- codomm assn)
-    \bigcup_(e  <- supp pe) zexpr_vars e.
+    \bigcup_(e <- supp pe) zexpr_vars defs e.
+
+Definition subst_vars defs σ :=
+  \bigcup_(v <- supp σ) zexpr_vars defs (σ v).
 
 Definition Assn assn :=
   if assn == emptym then CSkip
   else CAssn assn CSkip.
 
-Definition DAssn dassn := Assn (mapm dirac dassn).
+Definition DAssn σ := Assn (mapm dirac (val σ)).
 
 Definition Block vs c :=
   if vs == fset0 then c
@@ -74,38 +102,69 @@ Qed.
 Lemma Seqc1 c : c;; CSkip = c.
 Proof. elim: c=> //= *; congruence. Qed.
 
-Fixpoint run φ c st : {prob state} :=
+Definition do_subst defs σ st :=
+  updm st (mapm (feval_zexpr defs st) (val σ)).
+
+Lemma do_subst0 defs st : do_subst defs emptyf st = st.
+Proof.
+by apply/eq_ffun=> v /=; rewrite /do_subst updmE mapmE /=.
+Qed.
+
+Lemma do_substE defs σ st v :
+  do_subst defs σ st v = feval_zexpr defs st (σ v).
+Proof.
+rewrite /do_subst updmE mapmE /appf.
+by case: (val σ v)=> [e|] //=.
+Qed.
+
+Definition do_assn defs assn st : {prob state} :=
+  sample: vals <- mapm_p id assn;
+  dirac (updm st (mapm (feval_zexpr defs st) vals)).
+
+Lemma do_assn0 defs st : do_assn defs emptym st = dirac st.
+Proof.
+rewrite /do_assn mapm_p0 sample_diracL; congr dirac.
+by apply/eq_ffun=> v; rewrite updmE mapmE.
+Qed.
+
+Lemma do_assnD defs σ st :
+  do_assn defs (mapm dirac (val σ)) st = dirac (do_subst defs σ st).
+Proof.
+rewrite /do_assn mapm_p_comp.
+under eq_mapm_p=> e do rewrite /=.
+by rewrite mapm_p_dirac sample_diracL.
+Qed.
+
+Fixpoint run defs c st {struct c} : {prob state} :=
   match c with
   | CSkip =>
     dirac st
   | CAssn assn c =>
-    let eval pe := sample: e <- pe; dirac (eval_zexpr (φ st) e) in
-    sample: assn' <- mapm_p eval assn;
-    run φ c (updm st assn')
+    sample: st' <- do_assn defs assn st;
+    run defs c st'
   | CIf e cthen celse c =>
-    let branch := if eval_bexpr (φ st) e then cthen else celse in
-    sample (run φ branch st) (run φ c)
+    let branch := if feval_bexpr defs st e then cthen else celse in
+    sample (run defs branch st) (run defs c)
   | CBlock vs block c =>
     let old : state := mkffun st vs in
     let new := updm st (mkfmapf (fun _ => 0%R) vs) in
-    sample: st' <- run φ block new;
-    run φ c (updm st' (mkfmapf old vs))
+    sample: st' <- run defs block new;
+    run defs c (updm st' (mkfmapf old vs))
   end.
 
-Lemma run_Assn φ assn c st :
-  run φ (Assn assn;; c) st = run φ (CAssn assn c) st.
+Lemma run_Assn defs assn c st :
+  run defs (Assn assn;; c) st = run defs (CAssn assn c) st.
 Proof.
 rewrite /Assn /=; case: eqP=> [->|] //=.
-rewrite /mapm_p unlock /mapim_p /= !sample_diracL; congr run.
-by apply/eq_ffun=> v; rewrite updmE.
+by rewrite do_assn0 sample_diracL.
 Qed.
 
-Lemma run_Assn0 φ assn st :
-  run φ (Assn assn) st = run φ (CAssn assn CSkip) st.
+Lemma run_Assn0 defs assn st :
+  run defs (Assn assn) st = run defs (CAssn assn CSkip) st.
 Proof. by rewrite -run_Assn Seqc1. Qed.
 
-Lemma run_Block φ vs c st :
-  run φ (Block vs c) st = run φ (CBlock vs c CSkip) st.
+Lemma run_Block defs vs c st :
+  run defs (Block vs c) st = run defs (CBlock vs c CSkip) st.
 Proof.
 rewrite /Block /=; case: eqP=> [->|_] //=.
   rewrite (_ : updm st _ = st).
@@ -117,9 +176,9 @@ apply/eq_ffun=> v; rewrite !updmE /= !mkfmapfE mkffunE.
 by case: ifP=> // ->.
 Qed.
 
-Lemma run_Seq φ c1 c2 st :
-  run φ (c1;; c2) st =
-  sample: st' <- run φ c1 st; run φ c2 st'.
+Lemma run_Seq defs c1 c2 st :
+  run defs (c1;; c2) st =
+  sample: st' <- run defs c1 st; run defs c2 st'.
 Proof.
 elim: c1 st=> /=.
 - by move=> st; rewrite sample_diracL.
@@ -132,43 +191,21 @@ elim: c1 st=> /=.
   apply/eq_sample=> st'; exact: IH.
 Qed.
 
-Definition flush φ st dassn :=
-  updm st (mapm (eval_zexpr (φ st)) dassn).
+Lemma run_DAssn defs σ c st :
+  run defs (DAssn σ;; c) st
+  = run defs c (do_subst defs σ st).
+Proof. by rewrite run_Assn /= do_assnD sample_diracL. Qed.
 
-Lemma flushER st (rn : ffun ZVar) v :
-  flush id st (val rn) v = eval_zexpr st (rn v).
-Proof.
-rewrite /flush updmE mapmE [in rn v]/appf.
-case: (val rn v)=> //=.
-Qed.
-
-Lemma flushE φ st dassn v :
-  flush φ st dassn v =
-  if dassn v is Some e then eval_zexpr (φ st) e
-  else st v.
-Proof.
-rewrite /flush updmE mapmE.
-by case: (dassn v)=> [e|] //=.
-Qed.
-
-Lemma run_DAssn φ dassn c st :
-  run φ (DAssn dassn;; c) st
-  = run φ c (flush φ st dassn).
-Proof.
-rewrite run_Assn /= mapm_p_comp.
-under eq_mapm_p=> e do rewrite /= sample_diracL.
-by rewrite -mapm_p_comp mapm_p_dirac sample_diracL.
-Qed.
-
-Lemma AssnC dassn assn st :
-  fdisjoint (assn_vars (mapm dirac dassn)) (domm assn) ->
-  run id (DAssn dassn;; Assn assn) st =
-  run id (Assn (subst_assn (mkffunm ZVar dassn) assn);;
-          DAssn dassn) st.
+(*
+Lemma AssnC defs σ assn st :
+  fdisjoint (subst_vars defs σ) (domm assn) ->
+  run defs (DAssn σ;; Assn assn) st =
+  run defs (Assn (subst_assn σ assn);;
+            DAssn σ) st.
 Proof.
 move=> dis.
 rewrite run_DAssn run_Assn0 /= run_Assn /=.
-rewrite /subst_assn mapm_p_comp.
+rewrite /subst_assn.
 under [in RHS] eq_mapm_p=> pe /=.
   rewrite sampleA.
   under eq_sample=> e.
@@ -183,12 +220,9 @@ apply: eq_in_sample=> /= vals /supp_mapm_pP [/= edomm ecodomm].
 rewrite -[DAssn dassn]Seqc1 run_DAssn /=; congr dirac.
 apply/eq_ffun=> v; rewrite !(updmE, mapmE).
 case dassn_v: (dassn v)=> [e|] //=.
+*)
 
 Module Inlining.
-
-Notation renaming := (ffun ZVar).
-
-Implicit Types (rn : renaming) (vs : {fset var}).
 
 Module Type CONFLICTS.
 Parameter conflicts :
@@ -398,12 +432,6 @@ Record istate := IState {
   (* Map formulas to the state variables needed to compute them. *)
   used_vars   : ffun (fun v : var => fset1 v);
 }.
-
-Fixpoint eval_forms (fs : seq (var * zexpr)) st v : int :=
-  if fs is (f, e) :: fs then
-    if v == f then eval_zexpr (eval_forms fs st) e
-    else eval_forms fs st v
-  else st v.
 
 Implicit Types (rn : renaming) (ist : istate).
 
