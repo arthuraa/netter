@@ -12,6 +12,19 @@ Local Open Scope fset_scope.
 
 (* Consolidate this stuff in extructures. *)
 
+Lemma eq_mapm (T : ordType) S R (f g : S -> R) :
+  f =1 g -> @mapm T S R f =1 mapm g.
+Proof.
+move=> e m; apply/eq_fmap=> x; rewrite !mapmE.
+by case: (m x)=> [y|] //=; rewrite e.
+Qed.
+
+Lemma mapm_comp (T : ordType) S R U (g : R -> U) (f : S -> R) (m : {fmap T -> S}) :
+  mapm (g \o f) m = mapm g (mapm f m).
+Proof.
+by apply/eq_fmap=> x; rewrite !mapmE; case: (m x).
+Qed.
+
 Lemma fmap_ind (T : ordType) S (P : {fmap T -> S} -> Prop) :
   P emptym ->
   (forall m, P m -> forall x y, x \notin domm m -> P (setm m x y)) ->
