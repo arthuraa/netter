@@ -118,6 +118,8 @@ Canonical prob_of_eqType  := [eqType  of {prob T}].
 Canonical prob_of_choiceType := [choiceType of {prob T}].
 Canonical prob_of_ordType := [ordType of {prob T}].
 
+Implicit Types (p : {prob T}).
+
 Lemma mkprob_subproof X f pos :
   \sum_(x <- X) f x = 1 ->
   mass (@mkdistr X f pos) == 1.
@@ -139,6 +141,11 @@ Definition mkprob X f pos e : {prob T} :=
 Lemma mkprobE X f pos e x :
   @mkprob X f pos e x = if x \in X then f x else 0.
 Proof. by rewrite /mkprob unlock /= mkdistrE. Qed.
+
+Lemma suppPrN0 p : supp p != fset0.
+Proof.
+by apply/eqP=> e; move: (eqP (valP p)); rewrite /mass e big_nil.
+Qed.
 
 Definition dirac_def x x' : rat :=
   if x == x' then 1 else 0.
@@ -174,10 +181,10 @@ Proof.
 by move=> x y e; apply/fset1_inj; rewrite -!supp_dirac e.
 Qed.
 
-Lemma eq_prob (p1 p2 : {prob T}) : p1 =1 p2 <-> p1 = p2.
+Lemma eq_prob p1 p2 : p1 =1 p2 <-> p1 = p2.
 Proof. by split=> [/eq_distr/val_inj|-> //]. Qed.
 
-Lemma in_eq_probL (p1 p2 : {prob T}) : {in supp p1, p1 =1 p2} -> p1 = p2.
+Lemma in_eq_probL p1 p2 : {in supp p1, p1 =1 p2} -> p1 = p2.
 Proof.
 move=> e; apply/eq_prob=> x.
 case: (boolP (x \in supp p1))=> xP; first exact: e.
@@ -197,12 +204,12 @@ case: (boolP (x \in supp p2)) => x_p2; last by rewrite (suppPn x_p2).
 by move=> /allP/(_ _ x_p2); rewrite xP => /eqP ->.
 Qed.
 
-Lemma in_eq_projR (p1 p2 : {prob T}) : {in supp p2, p1 =1 p2} -> p1 = p2.
+Lemma in_eq_projR p1 p2 : {in supp p2, p1 =1 p2} -> p1 = p2.
 Proof.
 by move=> e; apply/esym/in_eq_probL=> x x_p2; rewrite e.
 Qed.
 
-Definition of_dirac (p : {prob T}) : option T :=
+Definition of_dirac p : option T :=
   if val (supp p) is [:: x] then Some x
   else None.
 
@@ -217,6 +224,12 @@ have {}e: supp p = fset1 x by rewrite fset1E -e fsvalK.
 move/eqP: (valP p); rewrite /mass e /= big_seq1 => p_x.
 apply/in_eq_projR=> y; rewrite e => /fset1P ->.
 by rewrite p_x diracE eqxx.
+Qed.
+
+Lemma eq_supp_dirac p x : (supp p == fset1 x) = (p == dirac x).
+Proof.
+apply/(sameP eqP)/(iffP eqP)=> [->|e]; first exact: supp_dirac.
+by move: (of_diracK p); rewrite /of_dirac e /= => <-.
 Qed.
 
 End Prob.
@@ -353,6 +366,20 @@ Proof.
 apply/eq_prob=> y.
 rewrite sampleE -GRing.mulr_suml -[RHS]GRing.mul1r; congr *%R.
 exact/eqP/(valP px).
+Qed.
+
+Lemma eq_sample_dirac (p : {prob T}) (f : T -> {prob S}) y :
+  sample p f = dirac y ->
+  forall x, x \in supp p -> f x = dirac y.
+Proof.
+move=> e x x_p.
+have {}e: supp (sample p f) = supp (dirac y) by rewrite e.
+rewrite supp_sample supp_dirac in e.
+apply/eqP; rewrite -eq_supp_dirac eqEfsubset; apply/andP; split.
+  rewrite -e; exact/bigcup_sup.
+rewrite fsub1set; have /fset0Pn [z zP] := suppPrN0 (f x).
+suff: z \in fset1 y by move=> /fset1P => <-.
+by rewrite -e; apply/bigcupP; exists x.
 Qed.
 
 End SampleProps.
