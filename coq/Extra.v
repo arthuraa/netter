@@ -99,6 +99,12 @@ rewrite uniq_perm ?filter_uniq ?uniq_fset //.
 by move=> x; rewrite /= in_fset_filter mem_filter.
 Qed.
 
+Lemma fset_filter_subset (T : ordType) (P : T -> bool) X :
+  fsubset (fset_filter P X) X.
+Proof.
+by apply/fsubsetP=> x; rewrite in_fset_filter; case/andP.
+Qed.
+
 Lemma val_domm (T : ordType) (S : Type) (m : {fmap T -> S}) :
   domm m = unzip1 m :> seq _.
 Proof.
@@ -169,6 +175,13 @@ Definition filter_map (f : T -> S -> option R) (m : {fmap T -> S}) : {fmap T -> 
 Lemma filter_mapE f m x : filter_map f m x = obind (f x) (m x).
 Proof.
 by rewrite /filter_map mkfmapfpE mem_domm; case: (m x).
+Qed.
+
+Lemma domm_filter_map f m :
+  domm (filter_map f m) = fset_filter (fun x => obind (f x) (m x)) (domm m).
+Proof.
+apply/eq_fset=> x.
+by rewrite mem_domm filter_mapE in_fset_filter mem_domm andbC; case: (m x).
 Qed.
 
 Lemma mapimK (f : T -> R -> S) (g : T -> S -> option R) :

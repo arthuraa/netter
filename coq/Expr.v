@@ -284,7 +284,7 @@ Ltac solve_eq_in_eval_exprP :=
 
 Implicit Types V : {fset symbol}.
 
-Lemma eq_in_eval_exprP V f g :
+Lemma eq_in_eval_expr V f g :
   {in V, f =1 g} ->
   (forall be, fsubset (bexpr_syms be) V ->
               eval_bexpr f be = eval_bexpr g be) /\
@@ -297,23 +297,23 @@ move=> efg; apply: expr_ind=> //=; try by solve_eq_in_eval_exprP.
 move=> v; rewrite fsub1set; exact: efg.
 Qed.
 
-Lemma eq_in_eval_bexprP V f g :
+Lemma eq_in_eval_bexpr V f g :
   {in V, f =1 g} ->
   forall e, fsubset (bexpr_syms e) V ->
   eval_bexpr f e = eval_bexpr g e.
-Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
+Proof. by move=> /eq_in_eval_expr [? [? ?]]. Qed.
 
-Lemma eq_in_eval_zexprP V f g :
+Lemma eq_in_eval_zexpr V f g :
   {in V, f =1 g} ->
   forall e, fsubset (zexpr_syms e) V ->
   eval_zexpr f e = eval_zexpr g e.
-Proof. by move=> /eq_in_eval_exprP [? [? ?]]. Qed.
+Proof. by move=> /eq_in_eval_expr [? [? ?]]. Qed.
 
 Lemma eq_eval_bexpr f g :
   f =1 g ->
   forall e, eval_bexpr f e = eval_bexpr g e.
 Proof.
-move=> fg ?; apply: eq_in_eval_bexprP (fsubsetxx _).
+move=> fg ?; apply: eq_in_eval_bexpr (fsubsetxx _).
 move=> ??; exact: fg.
 Qed.
 
@@ -321,7 +321,7 @@ Lemma eq_eval_zexpr f g :
   f =1 g ->
   forall e, eval_zexpr f e = eval_zexpr g e.
 Proof.
-move=> fg ?; apply: eq_in_eval_zexprP (fsubsetxx _).
+move=> fg ?; apply: eq_in_eval_zexpr (fsubsetxx _).
 move=> ??; exact: fg.
 Qed.
 
@@ -361,6 +361,19 @@ Definition sym_vars defs s : {fset var} :=
   | SFor f => formula_vars defs f
   end.
 
+Lemma eq_in_feval_sym defs st1 st2 s :
+  {in sym_vars defs s, st1 =1 st2} ->
+  feval_sym defs st1 s = feval_sym defs st2 s.
+Proof.
+case: s=> [v|f] /= est; first by apply: est; exact/fset1P.
+elim: defs f est=> [|[f e] defs IH] //= f'.
+case: (altP (f =P f'))=> [{f'} _|ne] est; last exact: IH.
+apply/eq_in_eval_zexpr; last exact/fsubsetxx.
+move=> [v|f'] in_e.
+  by apply: est; apply/bigcupP; exists (SVar v); rewrite // in_fset1 eqxx.
+by apply: IH=> // v in_f'; apply: est; apply/bigcupP; exists (SFor f').
+Qed.
+
 Definition feval_bexpr defs st e :=
   eval_bexpr (feval_sym defs st) e.
 
@@ -378,3 +391,23 @@ Definition zexpr_vars defs e :=
 
 Definition qexpr_vars defs e :=
   \bigcup_(s <- qexpr_syms e) sym_vars defs s.
+
+Lemma eq_in_feval_bexpr defs st1 st2 e :
+  {in bexpr_vars defs e, st1 =1 st2} ->
+  feval_bexpr defs st1 e = feval_bexpr defs st2 e.
+Proof.
+move=> est; rewrite /feval_bexpr /bexpr_vars.
+apply/eq_in_eval_bexpr; last exact: fsubsetxx.
+move=> s s_e; apply: eq_in_feval_sym=> v v_s.
+by apply: est; apply/bigcupP; exists s.
+Qed.
+
+Lemma eq_in_feval_zexpr defs st1 st2 e :
+  {in zexpr_vars defs e, st1 =1 st2} ->
+  feval_zexpr defs st1 e = feval_zexpr defs st2 e.
+Proof.
+move=> est; rewrite /feval_zexpr /zexpr_vars.
+apply/eq_in_eval_zexpr; last exact: fsubsetxx.
+move=> s s_e; apply: eq_in_feval_sym=> v v_s.
+by apply: est; apply/bigcupP; exists s.
+Qed.
