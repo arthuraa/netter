@@ -284,15 +284,95 @@ End CONFLICTS.
 
 Module Export Conflicts : CONFLICTS.
 
-Definition conflicts σ vs := supp σ :|: vs.
+Fixpoint loop k σ acc rem next :=
+  if k is k.+1 then
+    let has_conflict v := ~~ fdisjoint (zexpr_vars [::] (σ v)) next in
+    let next' := fset_filter has_conflict rem in
+    if next' == fset0 then acc
+    else loop k σ (acc :|: next') (rem :\: next') next'
+  else acc.
+
+Definition conflicts σ vs :=
+  loop (size (supp σ)) σ vs (supp σ :\: vs) vs.
+
+Lemma loop_sub k σ acc rem next : fsubset acc (loop k σ acc rem next).
+Proof.
+elim: k acc rem next => /= [|k IH] acc rem next; first exact: fsubsetxx.
+case: ifP=> _; first exact: fsubsetxx.
+apply: fsubset_trans (IH _ _ _); exact: fsubsetUl.
+Qed.
 
 Lemma conflicts_sub σ vs : fsubset vs (conflicts σ vs).
-Proof. exact: fsubsetUr. Qed.
+Proof. exact: loop_sub. Qed.
+
+Lemma loop_dis vs k σ acc next :
+  let rem := supp σ :\: acc in
+  let cs  := loop k σ acc rem next in
+  size rem <= k ->
+  fsubset next acc ->
+  fsubset acc (supp σ :|: vs) ->
+ (forall v, v \in rem -> fdisjoint (zexpr_vars [::] (σ v)) (acc :\: next)) ->
+  forall v, v \in supp σ -> v \notin cs ->
+    fdisjoint (zexpr_vars [::] (σ v)) cs.
+Proof.
+elim: k acc next=> [|k IH] acc next rem cs /=.
+  rewrite leqn0 sizes_eq0=> /eqP /eq_fset e sub1 sub2 accP v v_σ.
+  move/(_ v): e; rewrite in_fsetD v_σ andbT in_fset0.
+  by rewrite /cs /= => ->.
+rewrite {}/cs /=.
+set has_conflict := fun v => ~~ fdisjoint _ _.
+set next' := fset_filter has_conflict rem.
+move=> size_rem sub1 sub2 accP v v_σ.
+have acc_next: acc = acc :\: next :|: next.
+  by rewrite -{1}(fsetID acc next) (fsetIidPr _ _ sub1) fsetUC.
+case: (altP eqP)=> e.
+  move=> v_loop; have v_rem : v \in rem by rewrite in_fsetD v_loop.
+  rewrite acc_next fdisjointUr accP //.
+  rewrite (_ : fdisjoint _ _ = (v \notin next')); first by rewrite e.
+  by rewrite /next' in_fset_filter /rem in_fsetD v_loop v_σ !andbT negbK.
+rewrite /rem fsetDDl.
+set acc' := acc :|: next'.
+set rem' := supp σ :\: acc'.
+move=> v_loop.
+have sub_rem : fsubset rem' rem by apply/fsetDS/fsubsetUl.
+have {e} size_rem' : size rem' <= k.
+  case/fset0Pn: e=> v' v'_next'.
+  have v'_rem' : v' \notin rem'.
+    by rewrite in_fsetD in_fsetU v'_next' orbT.
+  have v'_rem : v' \in rem.
+    by move: v'_next'; rewrite in_fset_filter; case/andP.
+  have sub: fsubset rem' (rem :\ v').
+    apply/fsubsetP=> v'' v''_rem'; rewrite in_fsetD1.
+    rewrite (fsubsetP sub_rem) // andbT.
+    by apply: contra v'_rem'=> /eqP <-.
+  move/fsubset_leq_size in sub; apply: leq_trans sub _.
+  by move: size_rem; rewrite [size rem](sizesD1 v') v'_rem.
+have sub1' : fsubset next' acc' by exact: fsubsetUr.
+have sub2' : fsubset acc' (supp σ :|: vs).
+  apply/fsubsetP=> v'; case/fsetUP=> [/(fsubsetP sub2) //|].
+  rewrite in_fset_filter in_fsetU; case/andP=> _.
+  by case/fsetDP=> v'_σ _; rewrite v'_σ.
+apply: IH=> // {}v {}v_σ {v_loop}.
+have -> : acc' :\: next' = acc.
+  rewrite fsetDUl fsetDv fsetU0.
+  apply/eqP; rewrite eqEfsubset fsubDset fsubsetUr /=.
+  apply/fsubsetP=> v' v'_acc.
+  by rewrite in_fsetD in_fset_filter in_fsetD v'_acc andbF.
+move: v_σ; rewrite fsetDUr -/rem; case/fsetIP=> v_rem /fsetDP [_ v_next'].
+rewrite acc_next fdisjointUr accP //=.
+by move: v_next'; rewrite in_fset_filter v_rem andbC negbK.
+Qed.
 
 Lemma conflicts_dis σ vs v :
   v \in supp σ -> v \notin conflicts σ vs ->
   fdisjoint (zexpr_vars [::] (σ v)) (conflicts σ vs).
-Proof. by rewrite /conflicts in_fsetU => ->. Qed.
+Proof.
+apply: (@loop_dis vs).
+- by rewrite fsubset_leq_size // fsubDset fsubsetUr.
+- exact: fsubsetxx.
+- exact: fsubsetUr.
+by move=> {}v v_σ; rewrite fsetDv fdisjoints0.
+Qed.
 
 End Conflicts.
 
