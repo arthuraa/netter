@@ -439,22 +439,73 @@ Qed.
 
 Lemma coupling_sample (T1 S1 T2 S2 : ordType) (R1 : T1 -> S1 -> Prop) (R2 : T2 -> S2 -> Prop) pT pS f g :
   coupling R1 pT pS ->
-  (forall x y, R1 x y -> coupling R2 (f x) (g y)) ->
+  (forall x y, x \in supp pT -> y \in supp pS -> R1 x y ->
+    coupling R2 (f x) (g y)) ->
   coupling R2 (sample pT f) (sample pS g).
 Proof.
 case=> /= p eT eS R1P R12.
 pose def xy := sample: x' <- f xy.1; sample: y' <- g xy.2; dirac (x', y').
+have WT xy : xy \in supp p -> xy.1 \in supp pT.
+  move=> xyp; rewrite eT; apply/supp_sampleP.
+  exists xy=> //=; exact/supp_diracP.
+have WS xy : xy \in supp p -> xy.2 \in supp pS.
+  move=> xyp; rewrite eS; apply/supp_sampleP.
+  exists xy=> //=; exact/supp_diracP.
 pose draw xy := if insub xy is Some xy then
-                  let: Coupling p _ _ _ := R12 _ _ (R1P _ (svalP xy)) in p
+                  let xyP := svalP xy in
+                  let xP := WT _ xyP in
+                  let yP := WS _ xyP in
+                  let: Coupling p _ _ _ := R12 _ _ xP yP (R1P _ xyP) in p
                 else def xy.
 exists (sample p draw).
 - rewrite eT !sampleA; apply/eq_in_sample; case=> [x y] /= xy_supp.
-  by rewrite sample_diracL insubT /=; case: (R12 _ _ _).
+  by rewrite sample_diracL insubT /=; case: (R12 _ _ _ _ _).
 - rewrite eS !sampleA; apply/eq_in_sample; case=> [x y] /= xy_supp.
-  by rewrite sample_diracL insubT /=; by case: (R12 _ _ _).
+  by rewrite sample_diracL insubT /=; by case: (R12 _ _ _ _ _).
 case=> x' y' /supp_sampleP [] [x y] xy_supp.
 rewrite /draw insubT /=.
-case: (R12 _ _ _)=> /= pxy eT' eS' R2P; exact: R2P.
+case: (R12 _ _ _ _ _)=> /= pxy eT' eS' R2P; exact: R2P.
+Qed.
+
+Lemma coupling_same (T : ordType) (p : {prob T}) : coupling eq p p.
+Proof.
+pose pp := sample: x <- p; dirac (x, x); exists pp; rewrite ?sampleA.
+- under eq_sample do rewrite sample_diracL /=.
+  by rewrite sample_diracR.
+- under eq_sample do rewrite sample_diracL /=.
+  by rewrite sample_diracR.
+by move=> xx /supp_sampleP [] x x_p /supp_diracP ->.
+Qed.
+
+Lemma coupling_eq (T : ordType) (p q : {prob T}) : coupling eq p q -> p = q.
+Proof.
+by case=> pq -> -> {p q} e; apply/eq_in_sample; case=> x y /e /= ->.
+Qed.
+
+Lemma coupling_sample_same (T S1 S2 : ordType) (R : S1 -> S2 -> Prop) (p : {prob T}) f g :
+  (forall x, x \in supp p -> coupling R (f x) (g x)) ->
+  coupling R (sample p f) (sample p g).
+Proof.
+move=> e; apply: coupling_sample; first exact: coupling_same.
+move=> x _ x_p _ <-; exact: e.
+Qed.
+
+Lemma coupling_trivial (T S : ordType) (R : T -> S -> Prop) (pT : {prob T}) (pS : {prob S}) :
+  (forall x y, x \in supp pT -> y \in supp pS -> R x y) ->
+  @coupling T S R pT pS.
+Proof.
+move=> RP.
+exists (sample: x <- pT; sample: y <- pS; dirac (x, y)).
+- rewrite sampleA; under eq_sample => x.
+    rewrite sampleA; under eq_sample do rewrite sample_diracL.
+    rewrite /= sample_const; over.
+  by rewrite sample_diracR.
+- rewrite sampleA; under eq_sample=> x.
+    rewrite sampleA; under eq_sample do rewrite sample_diracL.
+    rewrite /= sample_diracR; over.
+  by rewrite sample_const.
+case=> x y /supp_sampleP [] x' xP /supp_sampleP [] y' yP /=.
+move=> /supp_diracP [-> ->]; exact: RP.
 Qed.
 
 Lemma couplingW (T S : ordType) (R1 R2 : T -> S -> Prop) pT pS :

@@ -2,7 +2,7 @@ Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice seq
-  ssrint rat ssralg ssrnum.
+  ssrint rat ssralg ssrnum bigop.
 
 From extructures Require Import ord fset fmap ffun.
 
@@ -297,7 +297,7 @@ move=> R; elim: c st1 st2.
 - move=> /= assn c IH st1 st2 vs.
   rewrite fsubUset fsubDset; case/andP=> sub_assn sub_c R12.
   suff H : coupling (R (domm assn :|: vs)) (do_assn defs assn st1) (do_assn defs assn st2).
-    apply: coupling_sample H _ => st1' st2' R12'.
+    apply: coupling_sample H _ => st1' st2' _ _ R12'.
     move/(IH _ _ _ sub_c): R12'; apply: couplingW.
     by move=> {}st1' {}st2' R12' v v_vs; apply: R12'; apply/fsetUP; right.
   pose u st exps := updm st (mapm (feval_zexpr defs st) exps).
@@ -323,7 +323,7 @@ move=> R; elim: c st1 st2.
     by apply/fsubsetP: v_in.
   rewrite eb; set cb := if b then cthen else celse.
   suff H : coupling (R vs) (run defs cb st1) (run defs cb st2).
-    apply: coupling_sample H _ => st1' st2'; exact: IHc.
+    apply: coupling_sample H _ => st1' st2' _ _; exact: IHc.
   by rewrite /cb; case: (b); [apply: IHthen|apply: IHelse].
 - move=> /= vs' block IHblock c IHc st1 st2 vs.
   rewrite fsubUset fsubDset; case/andP=> sub_block sub_c R12.
@@ -331,7 +331,7 @@ move=> R; elim: c st1 st2.
   have H1 : coupling (R (vs' :|: vs)) (rb st1) (rb st2).
     apply: IHblock=> // v; rewrite !updmE mkfmapfE.
     rewrite in_fsetU; case: ifP=> //= _; exact: R12.
-  apply: coupling_sample H1 _ => st1' st2' R12'.
+  apply: coupling_sample H1 _ => st1' st2' _ _ R12'.
   pose rest st st' : state := updm st' (mkfmapf st vs').
   have R12'' : R vs (rest st1 st1') (rest st2 st2').
     move=> v v_vs; rewrite !updmE !mkfmapfE.
@@ -391,7 +391,7 @@ move=> R; elim: c vs st1 st2.
     apply/eq_in_feval_bexpr=> v v_in; apply: R12; by rewrite !in_fsetU v_in.
   rewrite eb; set cb := if b then cthen else celse.
   suff H : coupling (R vs') (run defs cb st1) (run defs cb st2).
-    apply: coupling_sample H _ => st1' st2'; exact: IHc.
+    apply: coupling_sample H _ => st1' st2' _ _ ; exact: IHc.
   have R12then : R (com_used_vars vs' defs cthen) st1 st2.
     by move=> v v_in; apply: R12; rewrite !in_fsetU v_in /= orbT.
   have R12else : R (com_used_vars vs' defs celse) st1 st2.
@@ -406,12 +406,172 @@ move=> R; elim: c vs st1 st2.
     move=> v v_vs'; rewrite !updmE mkfmapfE; case: ifPn=> // v_locals.
     by apply: R12; apply/fsetUP; left; apply/fsetDP.
   have {}R12' := IHblock _ _ _ R12'.
-  apply: coupling_sample R12' _ => st1' st2' {}R12'.
+  apply: coupling_sample R12' _ => st1' st2' _ _ {}R12'.
   apply: IHc; rewrite -/vs' => v v_vs'; rewrite !updmE !mkfmapfE.
   case: ifPn => v_locals.
     by apply: R12; rewrite in_fsetU /reset in_fsetI v_vs' v_locals orbT.
   by apply: R12'; apply/fsetDP.
 Qed.
+
+Definition dependencies := ffun (fun v : var => fset1 v).
+Implicit Types deps : dependencies.
+
+Definition deps_spec deps f :=
+  let R vs st1 st2 := {in vs, st1 =1 st2} in
+  forall st1 st2 (vs : {fset var}),
+    R (\bigcup_(v <- vs) deps v) st1 st2 ->
+    coupling (R vs) (f st1) (f st2).
+
+Lemma deps_specW deps1 deps2 f :
+  (forall v, fsubset (deps1 v) (deps2 v)) ->
+  deps_spec deps1 f ->
+  deps_spec deps2 f.
+Proof.
+move=> deps12 deps1P R st1 st2 vs R12.
+apply: deps1P=> v' /bigcupP [] v v_vs _ /(fsubsetP (deps12 v)) v'_v.
+by apply: R12; apply/bigcupP; exists v.
+Qed.
+
+Definition deps_comp deps deps' : dependencies :=
+  mkffun (fun v' => \bigcup_(v <- deps' v') deps v)
+         (supp deps :|: supp deps').
+
+Lemma supp_deps_comp deps deps' :
+  fsubset (supp (deps_comp deps deps')) (supp deps :|: supp deps').
+Proof. exact: supp_mkffun_subset. Qed.
+
+Lemma deps_compP deps_f deps_g f g :
+  deps_spec deps_f f  ->
+  deps_spec deps_g g ->
+  deps_spec (deps_comp deps_f deps_g) (fun st => sample (f st) g).
+Proof.
+move=> fP gP R st1 st2 vs e12.
+set vs_g := \bigcup_(v <- vs) deps_g v.
+set vs_f := \bigcup_(v <- vs_g) deps_f v.
+suff vs_fE : vs_f = \bigcup_(v <- vs) deps_comp deps_f deps_g v.
+  move: e12; rewrite -vs_fE=> /fP e12.
+  by apply: coupling_sample e12 _ => st1' st2' _ _ /gP.
+apply/eqP; rewrite eqEfsubset; apply/andP; split.
+- apply/bigcupS=> v /bigcupP [] v' v'_vs _ v_v' _.
+  apply/fsubsetP=> v'' v''_v; apply/bigcupP; exists v'=> //.
+  rewrite /deps_comp mkffunE; case: ifPn; last first.
+    rewrite in_fsetU; case/norP=> v'_f v'_g.
+    move: v_v'; rewrite (suppPn v'_g) => /fset1P e.
+    by rewrite -(suppPn v'_f) -e.
+  by move=> ?; apply/bigcupP; exists v.
+- apply/bigcupS=> v v_vs _; apply/fsubsetP=> v'.
+  rewrite /deps_comp mkffunE; case: ifPn.
+    move=> _ /bigcupP [] v'' v''_v _ v'_v''.
+    by apply/bigcupP; exists v''=> //; apply/bigcupP; exists v.
+  rewrite in_fsetU; case/norP=> /suppPn v_f /suppPn v_g /fset1P ->.
+  rewrite /vs_f /vs_g.
+  apply/bigcupP; exists v; rewrite ?v_f ?in_fset1 ?eqxx //.
+  apply/bigcupP; exists v; rewrite ?v_g ?in_fset1 ?eqxx //.
+Qed.
+
+Fixpoint com_deps defs c : dependencies :=
+  match c with
+  | CSkip => emptyf
+  | CAssn assn c =>
+    let deps_assn v := if assn v is Some p then
+                         \bigcup_(e <- supp p) zexpr_vars defs e
+                       else fset1 v in
+    let deps_assn := mkffun deps_assn (domm assn) in
+    let deps_c := com_deps defs c in
+    deps_comp deps_assn deps_c
+  | CIf e cthen celse c =>
+    let deps_then := com_deps defs cthen in
+    let deps_else := com_deps defs celse in
+    let ve := bexpr_vars defs e in
+    let mod := com_mod_vars cthen :|: com_mod_vars celse in
+    let deps_b_def v := ve :|: deps_then v :|: deps_else v in
+    let deps_b := mkffun deps_b_def mod in
+    deps_comp deps_b (com_deps defs c)
+  | CBlock locals block c =>
+    let deps_locals : dependencies := mkffun (fun=> fset0) locals in
+    let deps_block := com_deps defs block in
+    let deps_c := com_deps defs c in
+    deps_comp deps_locals (deps_comp deps_block (deps_comp deps_locals deps_c))
+  end.
+
+Lemma supp_com_deps defs c : fsubset (supp (com_deps defs c)) (com_mod_vars c).
+Proof.
+elim: c.
+- by rewrite /= supp0 fsubsetxx.
+- move=> /= assn c IH.
+  apply: fsubset_trans (supp_deps_comp _ _) _.
+  apply: fsetUSS=> //; exact: supp_mkffun_subset.
+- move=> /= b cthen IHthen celse IHelse c IHc.
+  apply: fsubset_trans (supp_deps_comp _ _) _.
+  apply: fsetUSS=> //; exact: supp_mkffun_subset.
+- move=> /= locals block IHblock c IHc.
+  admit.
+Admitted.
+
+Lemma com_depsP defs c : deps_spec (com_deps defs c) (run defs c).
+Proof.
+elim: c.
+- move=> /= st1 st2 vs.
+  rewrite (_ : \bigcup_(v <- vs) emptyf v = vs); last first.
+    apply/eq_fset=> v; apply/(sameP bigcupP)/(iffP idP).
+    + by move=> v_vs; exists v; rewrite ?emptyfE ?in_fset1.
+    + by case=> v' v'_vs _; rewrite emptyfE => /fset1P ->.
+  exact: coupling_dirac.
+- move=> /= assn c IH; apply: deps_compP=> // R st1 st2 vs e12.
+  apply: coupling_sample_same=> exps /supp_mapm_pP [ed es].
+  apply: coupling_dirac=> v v_vs; rewrite !updmE !mapmE.
+  case exps_v: (exps v)=> [e|] //=.
+    apply/eq_in_feval_zexpr=> v' v'_e; apply: e12.
+    apply/bigcupP; exists v; rewrite // mkffunE mem_domm.
+    have /dommP [p assn_v] : v \in domm assn by rewrite ed mem_domm exps_v.
+    rewrite assn_v /=; apply/bigcupP; exists e=> //.
+    by apply: es assn_v _.
+  apply: e12; apply/bigcupP; exists v; rewrite // mkffunE.
+  have /dommPn assn_v : v \notin domm assn by rewrite ed mem_domm exps_v.
+  by rewrite mem_domm assn_v; apply/fset1P.
+- move=> /= e cthen IHthen celse IHelse c IHc.
+  apply: deps_compP=> // R st1 st2 vs.
+  set deps_then := com_deps defs cthen.
+  set deps_else := com_deps defs celse.
+  set ve := bexpr_vars defs e.
+  set mod := com_mod_vars cthen :|: com_mod_vars celse.
+  set deps_b_def := fun v => ve :|: deps_then v :|: deps_else v.
+  set deps_b := mkffun deps_b_def mod.
+  set b1 := feval_bexpr defs st1 e.
+  set b2 := feval_bexpr defs st2 e.
+  have [dis|not_dis] := boolP (fdisjoint vs mod).
+    rewrite big_seq; under eq_big=> [?|v v_vs]; first over.
+      rewrite /deps_b mkffunE (negbTE (fdisjointP dis _ v_vs)); over.
+    rewrite -big_seq bigcup1 fsvalK => R12.
+    apply: coupling_trivial=> st1' st2' st1'P st2'P v v_vs.
+    have v_mod := fdisjointP dis _ v_vs.
+    have {}v_mod b : v \notin com_mod_vars (if b then cthen else celse).
+      apply: contra v_mod; rewrite /mod in_fsetU.
+      case: b=> -> //; exact: orbT.
+    have -> : st1' v = st1 v by exact: com_mod_varsP st1'P (v_mod b1).
+    have -> : st2' v = st2 v by exact: com_mod_varsP st2'P (v_mod b2).
+    exact: R12.
+  set vs' := \bigcup_(v <- vs) deps_b v.
+  have sub : fsubset ve vs'.
+    have [v v_vs v_mod] : exists2 v, v \in vs & v \in mod.
+      by case/fset0Pn: not_dis=> v /fsetIP [] ??; exists v.
+    have sub : fsubset ve (deps_b v).
+      by rewrite /deps_b mkffunE v_mod /deps_b_def -fsetUA fsubsetUl.
+    apply: fsubset_trans sub _.
+    exact: bigcup_sup.
+  move=> R12; have R12' : R ve st1 st2.
+    by move=> v v_ve; apply: R12; apply/fsubsetP: v_ve.
+  have -> : b1 = b2 by apply/eq_in_feval_bexpr.
+  set cb := if b2 then cthen else celse.
+  set deps_b' := if b2 then deps_then else deps_else.
+  have IHcb : deps_spec deps_b' (run defs cb).
+    by rewrite /deps_b' /cb; case: (b2).
+  have {}IHcb : deps_spec deps_b (run defs cb).
+    apply: deps_specW IHcb=> v1; apply/fsubsetP=> v2.
+    admit.
+  by apply: IHcb.
+- admit.
+Admitted.
 
 Module Inlining.
 

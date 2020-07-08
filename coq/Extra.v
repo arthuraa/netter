@@ -22,6 +22,25 @@ apply/(iffP fsubsetP).
 - move=> sub x /bigcupP [i i_s Pi]; apply/fsubsetP; exact: sub.
 Qed.
 
+Lemma in_bigcup I (T : ordType) (P : I -> bool) (F : I -> {fset T}) s x :
+  x \in \bigcup_(i <- s | P i) F i = has (fun i => P i && (x \in F i)) s.
+Proof.
+elim: s=> [|y s IH] /=; first by rewrite big_nil.
+by rewrite big_cons; case: ifP; rewrite // in_fsetU IH.
+Qed.
+
+Lemma bigcup1_cond (T : ordType) (P : T -> bool) s :
+  \bigcup_(x <- s | P x) fset1 x = fset [seq x <- s | P x].
+Proof.
+apply/eq_fset=> x; rewrite in_bigcup in_fset mem_filter.
+apply/(sameP hasP)/(iffP andP).
+  by case=> Px xs; exists x; rewrite // Px in_fset1 eqxx.
+by case=> {}x xs /andP [] Px /fset1P ->.
+Qed.
+
+Lemma bigcup1 (T : ordType) (s : seq T) : \bigcup_(x <- s) fset1 x = fset s.
+Proof. by rewrite bigcup1_cond filter_predT. Qed.
+
 Lemma eq_mapm (T : ordType) S R (f g : S -> R) :
   f =1 g -> @mapm T S R f =1 mapm g.
 Proof.
@@ -347,4 +366,11 @@ Proof.
 rewrite in_pimfset; apply/(iffP imfsetP); case=> ??.
 - by move=> ->; eauto.
 - by move=> <-; eauto.
+Qed.
+
+Lemma supp_mkffun_subset (T : ordType) (S : eqType) (def f : T -> S) (X : {fset T}) :
+  fsubset (supp (@mkffun _ _ def f X)) X.
+Proof.
+rewrite supp_mkffun; apply/fsubsetP=> x; rewrite in_fset mem_filter.
+by case/andP.
 Qed.
