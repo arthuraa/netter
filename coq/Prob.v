@@ -424,6 +424,42 @@ Qed.
 
 Open Scope prob_scope.
 
+Variant coupling (T S : ordType) (R : T -> S -> Prop) pT pS : Type :=
+| Coupling p of
+  pT = sample p (dirac \o fst) &
+  pS = sample p (dirac \o snd) &
+  (forall xy, xy \in supp p -> R xy.1 xy.2).
+
+Definition couplingW T S R pT pS (c : @coupling T S R pT pS) : {prob T * S} :=
+  let: Coupling p _ _ _ := c in p.
+
+Lemma coupling_dirac (T S : ordType) (R : T -> S -> Prop) x y :
+  R x y -> coupling R (dirac x) (dirac y).
+Proof.
+move=> xy; exists (dirac (x, y)); rewrite ?sample_diracL //.
+by move=> [??] /supp_diracP [-> ->].
+Qed.
+
+Lemma coupling_sample (T1 S1 T2 S2 : ordType) (R1 : T1 -> S1 -> Prop) (R2 : T2 -> S2 -> Prop) pT pS f g :
+  coupling R1 pT pS ->
+  (forall x y, R1 x y -> coupling R2 (f x) (g y)) ->
+  coupling R2 (sample pT f) (sample pS g).
+Proof.
+case=> /= p eT eS R1P R12.
+pose def xy := sample: x' <- f xy.1; sample: y' <- g xy.2; dirac (x', y').
+pose draw xy := if insub xy is Some xy then
+                  couplingW (R12 _ _ (R1P _ (svalP xy)))
+                else def xy.
+exists (sample p draw).
+- rewrite eT !sampleA; apply/eq_in_sample; case=> [x y] /= xy_supp.
+  by rewrite sample_diracL insubT /=; case: (R12 _ _ _).
+- rewrite eS !sampleA; apply/eq_in_sample; case=> [x y] /= xy_supp.
+  by rewrite sample_diracL insubT /=; by case: (R12 _ _ _).
+case=> x' y' /supp_sampleP [] [x y] xy_supp.
+rewrite /draw insubT /=.
+case: (R12 _ _ _)=> /= pxy eT' eS' R2P; exact: R2P.
+Qed.
+
 Definition foldrM T (S : ordType) (f : T -> S -> {prob S}) (y : S) (xs : seq T) : {prob S} :=
   foldr (fun x p => sample p (f x)) (dirac y) xs.
 
