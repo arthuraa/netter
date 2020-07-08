@@ -161,10 +161,9 @@ Fixpoint run defs c st {struct c} : {prob state} :=
     let branch := if feval_bexpr defs st e then cthen else celse in
     sample (run defs branch st) (run defs c)
   | CBlock vs block c =>
-    let old : state := mkffun st vs in
     let new := updm st (mkfmapf (fun _ => 0%R) vs) in
     sample: st' <- run defs block new;
-    run defs c (updm st' (mkfmapf old vs))
+    run defs c (updm st' (mkfmapf st vs))
   end.
 
 Lemma run_Assn defs assn c st :
@@ -187,7 +186,7 @@ rewrite /Block /=; case: eqP=> [->|_] //=.
     by congr dirac; apply/eq_ffun=> v; rewrite updmE /=.
   by apply/eq_ffun=> v /=; rewrite updmE /=.
 case: c=> //=; rewrite sample_diracL; congr dirac.
-apply/eq_ffun=> v; rewrite !updmE /= !mkfmapfE mkffunE.
+apply/eq_ffun=> v; rewrite !updmE /= !mkfmapfE.
 by case: ifP=> // ->.
 Qed.
 
@@ -264,9 +263,82 @@ elim: c st st'.
 - move=> /= vs block IHblock c IHc st st''.
   case/supp_sampleP=> st' st'_supp st''_supp.
   rewrite in_fsetU in_fsetD negb_or; case/andP=> v_mod v_c.
-  rewrite (IHc _ _ st''_supp v_c) updmE mkfmapfE mkffunE.
+  rewrite (IHc _ _ st''_supp v_c) updmE mkfmapfE.
   case: (boolP (v \in vs)) v_mod=> //= v_vs v_block.
   by rewrite (IHblock _ _ st'_supp v_block) updmE mkfmapfE (negbTE v_vs).
+Qed.
+
+Fixpoint com_read_vars defs c :=
+  match c with
+  | CSkip =>
+    fset0
+  | CAssn assn c =>
+    \bigcup_(p <- codomm assn)
+      \bigcup_(e <- supp p) zexpr_vars defs e
+    :|: com_read_vars defs c
+  | CIf e cthen celse c =>
+    bexpr_vars defs e
+    :|: com_read_vars defs cthen
+    :|: com_read_vars defs celse
+    :|: com_read_vars defs c
+  | CBlock vs block c =>
+    (com_read_vars defs block :\: vs)
+    :|: com_read_vars defs c
+  end.
+
+Definition com_vars defs c :=
+  com_read_vars defs c :|: com_mod_vars c.
+
+Lemma com_read_varsP defs c st1 st2 :
+  let R vs st1 st2 := {in vs, st1 =1 st2} in
+  forall vs, fsubset (com_read_vars defs c) vs ->
+  R vs st1 st2 ->
+  coupling (R vs) (run defs c st1) (run defs c st2).
+Proof.
+move=> R; elim: c st1 st2.
+- move=> /= st1 st2 vs _ e; exact: coupling_dirac.
+- move=> /= assn c IH st1 st2 vs.
+  rewrite fsubUset; case/andP=> sub_assn sub_c R12.
+  suff H : coupling (R vs) (do_assn defs assn st1) (do_assn defs assn st2).
+    by apply: coupling_sample H _ => ??; apply: IH.
+  pose u st exps := updm st (mapm (feval_zexpr defs st) exps).
+  exists (sample: exps <- mapm_p id assn; dirac (u st1 exps, u st2 exps)).
+  + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
+  + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
+  case=> _ _ /supp_sampleP [exps /supp_mapm_pP [ed es] /supp_diracP [-> ->]].
+  move=> v v_vs; rewrite /= !updmE !mapmE.
+  case exps_v: (exps v)=> [e|] /=; last exact: R12.
+  have /dommP [p assn_v] : v \in domm assn by rewrite ed mem_domm exps_v.
+  have e_p := es _ _ _ assn_v exps_v.
+  have assn_p : p \in codomm assn by apply/codommP; exists v.
+  have {}sub_assn: fsubset (zexpr_vars defs e) vs.
+    move/bigcupS/(_ _ assn_p erefl): sub_assn.
+    by move/bigcupS/(_ _ e_p erefl).
+  apply/eq_in_feval_zexpr=> ? in_e; apply: R12.
+  by move: in_e; apply/fsubsetP.
+- move=> /= e cthen IHthen celse IHelse c IHc st1 st2 vs.
+  rewrite !fsubUset -!andbA; case/and4P=> sub_e sub_then sub_else sub_c R12.
+  set b := feval_bexpr defs st2 e.
+  have eb: feval_bexpr defs st1 e = b.
+    apply/eq_in_feval_bexpr=> v v_in; apply: R12.
+    by apply/fsubsetP: v_in.
+  rewrite eb; set cb := if b then cthen else celse.
+  suff H : coupling (R vs) (run defs cb st1) (run defs cb st2).
+    apply: coupling_sample H _ => st1' st2'; exact: IHc.
+  by rewrite /cb; case: (b); [apply: IHthen|apply: IHelse].
+- move=> /= vs' block IHblock c IHc st1 st2 vs.
+  rewrite fsubUset fsubDset; case/andP=> sub_block sub_c R12.
+  pose rb st := run defs block (updm st (mkfmapf (fun=> 0%R) vs')).
+  have H1 : coupling (R (vs' :|: vs)) (rb st1) (rb st2).
+    apply: IHblock=> // v; rewrite !updmE mkfmapfE.
+    rewrite in_fsetU; case: ifP=> //= _; exact: R12.
+  apply: coupling_sample H1 _ => st1' st2' R12'.
+  pose rest st st' : state := updm st' (mkfmapf st vs').
+  have R12'' : R vs (rest st1 st1') (rest st2 st2').
+    move=> v v_vs; rewrite !updmE !mkfmapfE.
+    case: ifP=> _; [apply: R12|apply: R12']=> //.
+    by apply/fsetUP; right.
+  exact: IHc.
 Qed.
 
 Module Inlining.
@@ -569,9 +641,9 @@ have wf1 : wf_subst [::] σ1 st1.
   suff /negbTE -> : v' \notin vs by [].
   apply: contra v'_cs0; apply/fsubsetP; exact: conflicts_sub.
 have [{}eblock wf2] := IHblock _ _ _ _ wf1 eblock.
-set r0 := mkfmapf (mkffun st0 vs) vs.
+set r0 := mkfmapf st0 vs.
 have r0E v : r0 v = if v \in vs then Some (st0 v) else None.
-  by rewrite /r0 mkfmapfE mkffunE; case: ifP=> // ->.
+  by rewrite /r0 mkfmapfE; case: ifP=> // ->.
 set p2 := run [::] block st1 in eblock *.
 have wf3 st2 : st2 \in supp p2 -> wf_subst [::] σ3 (updm st2 r0).
   move=> {}/wf2 wf2 v; rewrite /σ3 /σ3_def mkffunE.

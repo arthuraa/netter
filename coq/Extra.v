@@ -12,6 +12,16 @@ Local Open Scope fset_scope.
 
 (* Consolidate this stuff in extructures. *)
 
+Lemma bigcupS (I : eqType) (T : ordType) (P : I -> bool) (F : I -> {fset T}) s X :
+  reflect (forall i : I, i \in s -> P i -> fsubset (F i) X)
+          (fsubset (\bigcup_(i <- s | P i) F i) X).
+Proof.
+apply/(iffP fsubsetP).
+- move=> sub i i_s Pi; apply/fsubsetP=> x x_i.
+  by apply: sub; apply/bigcupP; exists i.
+- move=> sub x /bigcupP [i i_s Pi]; apply/fsubsetP; exact: sub.
+Qed.
+
 Lemma eq_mapm (T : ordType) S R (f g : S -> R) :
   f =1 g -> @mapm T S R f =1 mapm g.
 Proof.
