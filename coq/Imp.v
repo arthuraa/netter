@@ -286,9 +286,6 @@ Fixpoint com_read_vars defs c :=
     :|: com_read_vars defs c
   end.
 
-Definition com_vars defs c :=
-  com_read_vars defs c :|: com_mod_vars c.
-
 Lemma com_read_varsP defs c st1 st2 :
   let R vs st1 st2 := {in vs, st1 =1 st2} in
   forall vs, fsubset (com_read_vars defs c) vs ->
@@ -341,6 +338,79 @@ move=> R; elim: c st1 st2.
     case: ifP=> _; [apply: R12|apply: R12']=> //.
     by apply/fsetUP; right.
   exact: IHc.
+Qed.
+
+(* Find out which variables are needed to compute some portion of the state *)
+Fixpoint com_used_vars (vs : {fset var}) defs c :=
+  match c with
+  | CSkip => vs
+  | CAssn assn c =>
+    \bigcup_(v <- com_used_vars vs defs c)
+       if assn v is Some p then \bigcup_(e <- supp p) zexpr_vars defs e
+       else fset1 v
+  | CIf e cthen celse c =>
+    let vs := com_used_vars vs defs c in
+    bexpr_vars defs e
+    :|: com_used_vars vs defs cthen
+    :|: com_used_vars vs defs celse
+  | CBlock locals block c =>
+    let vs' := com_used_vars vs defs c in
+    let reset := locals :&: vs' in
+    com_used_vars (vs' :\: locals) defs block :\: locals :|: reset
+  end.
+
+Lemma com_used_varsP vs defs c st1 st2 :
+  let R vs st1 st2 := {in vs, st1 =1 st2} in
+  R (com_used_vars vs defs c) st1 st2 ->
+  coupling (R vs) (run defs c st1) (run defs c st2).
+Proof.
+move=> R; elim: c vs st1 st2.
+- by move=> /= vs st1 st2 R12; apply: coupling_dirac.
+- move=> /= assn c IH vs st1 st2 R12.
+  pose pu st := do_assn defs assn st.
+  suff H : coupling (R (com_used_vars vs defs c)) (pu st1) (pu st2).
+    by apply: coupling_sample H _; eauto.
+  pose u st exps := updm st (mapm (feval_zexpr defs st) exps).
+  exists (sample: exps <- mapm_p id assn; dirac (u st1 exps, u st2 exps)).
+  + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
+  + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
+  case=> _ _ /supp_sampleP [exps /supp_mapm_pP [ed es] /supp_diracP [-> ->]].
+  move=> v v_vs; rewrite /= !updmE !mapmE.
+  case exps_v: (exps v)=> [e|] /=; last first.
+    have /dommPn assn_v : v \notin domm assn by rewrite ed mem_domm exps_v.
+    by apply: R12; apply/bigcupP; exists v; rewrite // assn_v in_fset1 eqxx.
+  have /dommP [p assn_v] : v \in domm assn by rewrite ed mem_domm exps_v.
+  have e_p := es _ _ _ assn_v exps_v.
+  apply/eq_in_feval_zexpr=> v' v'P; apply: R12.
+  apply/bigcupP; exists v; rewrite // assn_v.
+  by apply/bigcupP; exists e.
+- move=> /= e cthen IHthen celse IHelse c IHc vs st1 st2 R12.
+  set vs' := com_used_vars vs defs c in R12 *.
+  set b := feval_bexpr defs st2 e.
+  have eb: feval_bexpr defs st1 e = b.
+    apply/eq_in_feval_bexpr=> v v_in; apply: R12; by rewrite !in_fsetU v_in.
+  rewrite eb; set cb := if b then cthen else celse.
+  suff H : coupling (R vs') (run defs cb st1) (run defs cb st2).
+    apply: coupling_sample H _ => st1' st2'; exact: IHc.
+  have R12then : R (com_used_vars vs' defs cthen) st1 st2.
+    by move=> v v_in; apply: R12; rewrite !in_fsetU v_in /= orbT.
+  have R12else : R (com_used_vars vs' defs celse) st1 st2.
+    by move=> v v_in; apply: R12; rewrite !in_fsetU v_in /= orbT.
+  by rewrite /cb; case: (b); [apply: IHthen|apply: IHelse].
+- move=> /= locals block IHblock c IHc vs st1 st2 R12.
+  set vs' := com_used_vars vs defs c in R12 *.
+  set reset := locals :&: vs' in R12 *.
+  set vs'' := com_used_vars (vs' :\: locals) defs block in R12 *.
+  pose u st : state := updm st (mkfmapf (fun=> 0%R) locals).
+  have R12' : R vs'' (u st1) (u st2).
+    move=> v v_vs'; rewrite !updmE mkfmapfE; case: ifPn=> // v_locals.
+    by apply: R12; apply/fsetUP; left; apply/fsetDP.
+  have {}R12' := IHblock _ _ _ R12'.
+  apply: coupling_sample R12' _ => st1' st2' {}R12'.
+  apply: IHc; rewrite -/vs' => v v_vs'; rewrite !updmE !mkfmapfE.
+  case: ifPn => v_locals.
+    by apply: R12; rewrite in_fsetU /reset in_fsetI v_vs' v_locals orbT.
+  by apply: R12'; apply/fsetDP.
 Qed.
 
 Module Inlining.
