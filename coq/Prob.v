@@ -430,9 +430,6 @@ Variant coupling (T S : ordType) (R : T -> S -> Prop) pT pS : Type :=
   pS = sample p (dirac \o snd) &
   (forall xy, xy \in supp p -> R xy.1 xy.2).
 
-Definition couplingW T S R pT pS (c : @coupling T S R pT pS) : {prob T * S} :=
-  let: Coupling p _ _ _ := c in p.
-
 Lemma coupling_dirac (T S : ordType) (R : T -> S -> Prop) x y :
   R x y -> coupling R (dirac x) (dirac y).
 Proof.
@@ -448,7 +445,7 @@ Proof.
 case=> /= p eT eS R1P R12.
 pose def xy := sample: x' <- f xy.1; sample: y' <- g xy.2; dirac (x', y').
 pose draw xy := if insub xy is Some xy then
-                  couplingW (R12 _ _ (R1P _ (svalP xy)))
+                  let: Coupling p _ _ _ := R12 _ _ (R1P _ (svalP xy)) in p
                 else def xy.
 exists (sample p draw).
 - rewrite eT !sampleA; apply/eq_in_sample; case=> [x y] /= xy_supp.
@@ -459,6 +456,12 @@ case=> x' y' /supp_sampleP [] [x y] xy_supp.
 rewrite /draw insubT /=.
 case: (R12 _ _ _)=> /= pxy eT' eS' R2P; exact: R2P.
 Qed.
+
+Lemma couplingW (T S : ordType) (R1 R2 : T -> S -> Prop) pT pS :
+  (forall x y, R1 x y -> R2 x y) ->
+  @coupling T S R1 pT pS ->
+  coupling R2 pT pS.
+Proof. by move=> R12 [p eT eS R1P]; exists p; eauto. Qed.
 
 Definition foldrM T (S : ordType) (f : T -> S -> {prob S}) (y : S) (xs : seq T) : {prob S} :=
   foldr (fun x p => sample p (f x)) (dirac y) xs.

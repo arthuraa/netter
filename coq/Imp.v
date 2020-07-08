@@ -275,7 +275,7 @@ Fixpoint com_read_vars defs c :=
   | CAssn assn c =>
     \bigcup_(p <- codomm assn)
       \bigcup_(e <- supp p) zexpr_vars defs e
-    :|: com_read_vars defs c
+    :|: (com_read_vars defs c :\: domm assn)
   | CIf e cthen celse c =>
     bexpr_vars defs e
     :|: com_read_vars defs cthen
@@ -298,15 +298,17 @@ Proof.
 move=> R; elim: c st1 st2.
 - move=> /= st1 st2 vs _ e; exact: coupling_dirac.
 - move=> /= assn c IH st1 st2 vs.
-  rewrite fsubUset; case/andP=> sub_assn sub_c R12.
-  suff H : coupling (R vs) (do_assn defs assn st1) (do_assn defs assn st2).
-    by apply: coupling_sample H _ => ??; apply: IH.
+  rewrite fsubUset fsubDset; case/andP=> sub_assn sub_c R12.
+  suff H : coupling (R (domm assn :|: vs)) (do_assn defs assn st1) (do_assn defs assn st2).
+    apply: coupling_sample H _ => st1' st2' R12'.
+    move/(IH _ _ _ sub_c): R12'; apply: couplingW.
+    by move=> {}st1' {}st2' R12' v v_vs; apply: R12'; apply/fsetUP; right.
   pose u st exps := updm st (mapm (feval_zexpr defs st) exps).
   exists (sample: exps <- mapm_p id assn; dirac (u st1 exps, u st2 exps)).
   + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
   + by rewrite sampleA; apply/eq_sample=> exps; rewrite sample_diracL.
   case=> _ _ /supp_sampleP [exps /supp_mapm_pP [ed es] /supp_diracP [-> ->]].
-  move=> v v_vs; rewrite /= !updmE !mapmE.
+  move=> v; rewrite /= !updmE !mapmE in_fsetU ed mem_domm.
   case exps_v: (exps v)=> [e|] /=; last exact: R12.
   have /dommP [p assn_v] : v \in domm assn by rewrite ed mem_domm exps_v.
   have e_p := es _ _ _ assn_v exps_v.
@@ -314,7 +316,7 @@ move=> R; elim: c st1 st2.
   have {}sub_assn: fsubset (zexpr_vars defs e) vs.
     move/bigcupS/(_ _ assn_p erefl): sub_assn.
     by move/bigcupS/(_ _ e_p erefl).
-  apply/eq_in_feval_zexpr=> ? in_e; apply: R12.
+  move=> _; apply/eq_in_feval_zexpr=> ? in_e; apply: R12.
   by move: in_e; apply/fsubsetP.
 - move=> /= e cthen IHthen celse IHelse c IHc st1 st2 vs.
   rewrite !fsubUset -!andbA; case/and4P=> sub_e sub_then sub_else sub_c R12.
