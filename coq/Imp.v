@@ -416,6 +416,9 @@ Fixpoint inline_loop σ c : subst * com :=
 Definition wf_subst defs σ st :=
   forall v, feval_zexpr defs st (σ v) = st v.
 
+Lemma wf_subst0 defs st : wf_subst defs emptyf st.
+Proof. by move=> ?; rewrite emptyfE. Qed.
+
 Lemma wf_subst_feval_zexpr σ st defs e :
   wf_subst defs σ st ->
   feval_zexpr defs st (subst_zexpr (app_subst σ) e) = feval_zexpr defs st e.
@@ -596,6 +599,30 @@ elim: c=> *.
 - exact: inline_loop_assn.
 - exact: inline_loop_if.
 - exact: inline_loop_block.
+Qed.
+
+Definition inline c rew :=
+  let: (σ, c') := inline_loop emptyf c in
+  (c', [seq subst_zexpr (app_subst σ) e | e <- rew]).
+
+Lemma inline_run c rew c' rew' st :
+  inline c rew = (c', rew') ->
+  run [::] c' st = run [::] c st.
+Proof.
+rewrite /inline; case e: (inline_loop emptyf _)=> [σ {}c'] [<- _].
+by have [] := inline_loopP (wf_subst0 _ st) e.
+Qed.
+
+Lemma inline_rew c rew c' rew' st st' :
+  inline c rew = (c', rew') ->
+  st' \in supp (run [::] c st) ->
+  [seq feval_zexpr [::] st' r | r <- rew'] =
+  [seq feval_zexpr [::] st' r | r <- rew ].
+Proof.
+rewrite /inline; case e: (inline_loop emptyf _)=> [σ {}c'] [_ <-] in_supp.
+have [_ /(_ _ in_supp) σP] := inline_loopP (wf_subst0 _ st) e.
+rewrite -map_comp /=; apply/eq_map=> r /=.
+exact: wf_subst_feval_zexpr.
 Qed.
 
 End Inlining.
