@@ -35,7 +35,7 @@ Definition com_eqMixin := [derive eqMixin for com].
 Canonical com_eqType := EqType com com_eqMixin.
 
 Implicit Types (c : com) (assn : assignment) (σ : subst)
-  (st : state) (defs : formulas) (v : var).
+  (st : state) (defs : formulas) (vs : {fset var}) (v : var).
 
 Definition app_subst σ s :=
   if s is SVar v then σ v else ZSym s.
@@ -118,8 +118,8 @@ by case: (val σ v)=> [e|] //=.
 Qed.
 
 Definition do_assn defs assn st : {prob state} :=
-  sample: vals <- mapm_p id assn;
-  dirac (updm st (mapm (feval_zexpr defs st) vals)).
+  sample: expr <- mapm_p id assn;
+  dirac (updm st (mapm (feval_zexpr defs st) expr)).
 
 Lemma do_assnP defs assn st st' v :
   st' \in supp (do_assn defs assn st) ->
@@ -416,10 +416,12 @@ Qed.
 Definition dependencies := ffun (fun v : var => fset1 v).
 Implicit Types deps : dependencies.
 
+Definition lift_deps deps vs := \bigcup_(v <- vs) deps v.
+
 Definition deps_spec deps f :=
   let R vs st1 st2 := {in vs, st1 =1 st2} in
-  forall st1 st2 (vs : {fset var}),
-    R (\bigcup_(v <- vs) deps v) st1 st2 ->
+  forall st1 st2 vs,
+    R (lift_deps deps vs) st1 st2 ->
     coupling (R vs) (f st1) (f st2).
 
 Lemma deps_specW deps1 deps2 f :
@@ -433,7 +435,7 @@ by apply: R12; apply/bigcupP; exists v.
 Qed.
 
 Definition deps_comp deps deps' : dependencies :=
-  mkffun (fun v' => \bigcup_(v <- deps' v') deps v)
+  mkffun (fun v => lift_deps deps (deps' v))
          (supp deps :|: supp deps').
 
 Lemma supp_deps_comp deps deps' :
@@ -448,7 +450,7 @@ Proof.
 move=> fP gP R st1 st2 vs e12.
 set vs_g := \bigcup_(v <- vs) deps_g v.
 set vs_f := \bigcup_(v <- vs_g) deps_f v.
-suff vs_fE : vs_f = \bigcup_(v <- vs) deps_comp deps_f deps_g v.
+suff vs_fE : vs_f = lift_deps (deps_comp deps_f deps_g) vs.
   move: e12; rewrite -vs_fE=> /fP e12.
   by apply: coupling_sample e12 _ => st1' st2' _ _ /gP.
 apply/eqP; rewrite eqEfsubset; apply/andP; split.
@@ -469,16 +471,18 @@ apply/eqP; rewrite eqEfsubset; apply/andP; split.
   apply/bigcupP; exists v; rewrite ?v_g ?in_fset1 ?eqxx //.
 Qed.
 
+Definition assn_deps defs assn : dependencies :=
+  let def v := if assn v is Some p then
+                 \bigcup_(e <- supp p) zexpr_vars defs e
+               else fset1 v in
+  mkffun def (domm assn).
+
 Fixpoint com_deps defs c : dependencies :=
   match c with
   | CSkip => emptyf
   | CAssn assn c =>
-    let deps_assn v := if assn v is Some p then
-                         \bigcup_(e <- supp p) zexpr_vars defs e
-                       else fset1 v in
-    let deps_assn := mkffun deps_assn (domm assn) in
     let deps_c := com_deps defs c in
-    deps_comp deps_assn deps_c
+    deps_comp (assn_deps defs assn) deps_c
   | CIf e cthen celse c =>
     let deps_then := com_deps defs cthen in
     let deps_else := com_deps defs celse in
@@ -521,7 +525,7 @@ Lemma com_depsP defs c : deps_spec (com_deps defs c) (run defs c).
 Proof.
 elim: c.
 - move=> /= st1 st2 vs.
-  rewrite (_ : \bigcup_(v <- vs) emptyf v = vs); last first.
+  rewrite (_ : lift_deps emptyf vs = vs); last first.
     apply/eq_fset=> v; apply/(sameP bigcupP)/(iffP idP).
     + by move=> v_vs; exists v; rewrite ?emptyfE ?in_fset1.
     + by case=> v' v'_vs _; rewrite emptyfE => /fset1P ->.
@@ -549,7 +553,7 @@ elim: c.
   set b1 := feval_bexpr defs st1 e.
   set b2 := feval_bexpr defs st2 e.
   have [dis|not_dis] := boolP (fdisjoint vs mod).
-    rewrite big_seq; under eq_big=> [?|v v_vs]; first over.
+    rewrite /lift_deps big_seq; under eq_big=> [?|v v_vs]; first over.
       rewrite /deps_b mkffunE (negbTE (fdisjointP dis _ v_vs)); over.
     rewrite -big_seq bigcup1 fsvalK => R12.
     apply: coupling_trivial=> st1' st2' st1'P st2'P v v_vs.
@@ -640,7 +644,7 @@ Lemma live_vars_loopP k deps vs0 vs :
   fsubset vs0 vs ->
   (forall v, v \in vs -> fsubset (deps v) vs) ->
   let fp := live_vars_loop k deps vs0 in
-  fp = fp :|: \bigcup_(v <- fp) deps v.
+  fp = fp :|: lift_deps deps fp.
 Proof.
 move=> hsize sub_vs sub_deps fp.
 elim: k vs0 @fp hsize sub_vs=> [|k IH] vs0.
@@ -669,7 +673,7 @@ Qed.
 
 Definition live_vars defs c vs0 :=
   let deps := com_deps defs c in
-  let vs   := vs0 :|: \bigcup_(v <- supp deps) deps v in
+  let vs   := vs0 :|: lift_deps deps (supp deps) in
   live_vars_loop (size vs) deps vs0.
 
 Lemma fsubset_live_vars defs c vs0 : fsubset vs0 (live_vars defs c vs0).
@@ -678,7 +682,7 @@ Proof. exact: fsubset_live_vars_loop. Qed.
 Lemma live_varsP defs c vs0 :
   let deps := com_deps defs c in
   let vs := live_vars defs c vs0 in
-  vs = vs :|: \bigcup_(v <- vs) deps v.
+  vs = vs :|: lift_deps deps vs.
 Proof.
 move=> deps; rewrite /live_vars -/deps; set vs := vs0 :|: _.
 apply: (@live_vars_loopP _ _ _ vs).
