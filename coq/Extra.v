@@ -12,6 +12,19 @@ Local Open Scope fset_scope.
 
 (* Consolidate this stuff in extructures. *)
 
+Lemma filterm0 (T : ordType) (S : Type) (f : T -> S -> bool) : filterm f emptym = emptym.
+Proof. by apply/eq_fmap=> x; rewrite filtermE. Qed.
+
+Lemma filterm_set (T : ordType) (S : Type) (f : T -> S -> bool) m x y :
+  filterm f (setm m x y) =
+  if f x y then setm (filterm f m) x y
+  else remm (filterm f m) x.
+Proof.
+apply/eq_fmap=> x'; have [yes|no] := boolP (f x y).
+  by rewrite !(setmE, filtermE); case: eqP=> //= ->; rewrite yes.
+by rewrite remmE !filtermE setmE; case: eqP no=> //= -> /negbTE ->.
+Qed.
+
 Lemma fsetUDr (T : ordType) (A B C : {fset T}) :
   A :|: B :\: C = (A :|: B) :\: (C :\: A).
 Proof.
@@ -61,15 +74,16 @@ Proof.
 by apply/eq_fmap=> x; rewrite !mapmE; case: (m x).
 Qed.
 
-Lemma fmap_ind (T : ordType) S (P : {fmap T -> S} -> Prop) :
+Lemma fmap_rect (T : ordType) S (P : {fmap T -> S} -> Type) :
   P emptym ->
   (forall m, P m -> forall x y, x \notin domm m -> P (setm m x y)) ->
   forall m, P m.
 Proof.
 move=> H0 H1 m; move e: (domm m)=> X.
-elim/fset_ind: X m e=> [|x X x_X IH] m e.
+elim/fset_rect: X m e=> [|x X x_X IH] m e.
   by move/eqP/emptymP: e=> ->.
-have /dommP [y yP]: x \in domm m by rewrite e in_fsetU1 eqxx.
+have : x \in domm m by rewrite e in_fsetU1 eqxx.
+rewrite mem_domm; case yP: (m x)=> [y|] // _.
 set m' := remm m x; have em : m = setm m' x y.
   apply/eq_fmap=> x'; rewrite /m' setmE remmE.
   by case: eqP => [->|].
@@ -79,6 +93,12 @@ have {}e : domm m' = X.
 rewrite {}em; apply: H1; first by exact: IH.
 by rewrite e.
 Qed.
+
+Lemma fmap_ind (T : ordType) S (P : {fmap T -> S} -> Prop) :
+  P emptym ->
+  (forall m, P m -> forall x y, x \notin domm m -> P (setm m x y)) ->
+  forall m, P m.
+Proof. exact: fmap_rect. Qed.
 
 Lemma remmI (T : ordType) S (m : {fmap T -> S}) x :
   x \notin domm m ->
