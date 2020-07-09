@@ -508,6 +508,27 @@ case=> x y /supp_sampleP [] x' xP /supp_sampleP [] y' yP /=.
 move=> /supp_diracP [-> ->]; exact: RP.
 Qed.
 
+Lemma couplingT T S pT pS : @coupling T S (fun _ _ => True) pT pS.
+Proof. by apply: coupling_trivial. Qed.
+
+Lemma coupling_sampleL (T S1 S2 : ordType) (R : S1 -> S2 -> Prop) (pT : {prob T}) f pS :
+  (forall x, x \in supp pT -> coupling R (f x) pS) ->
+  coupling R (sample: x <- pT; f x) pS.
+Proof.
+move=> RP; rewrite -[pS](sample_const pS).
+apply: coupling_sample (couplingT _ _) _ => x _ xP _ _.
+exact: RP.
+Qed.
+
+Lemma coupling_sampleR (T S1 S2 : ordType) (R : S1 -> S2 -> Prop) (pT : {prob T}) f pS :
+  (forall x, x \in supp pT -> coupling R pS (f x)) ->
+  coupling R pS (sample: x <- pT; f x).
+Proof.
+move=> RP; rewrite -[pS](sample_const pS).
+apply: coupling_sample (couplingT _ _) _ => _ x _ xP _.
+exact: RP.
+Qed.
+
 Lemma couplingW (T S : ordType) (R1 R2 : T -> S -> Prop) pT pS :
   (forall x y, R1 x y -> R2 x y) ->
   @coupling T S R1 pT pS ->
