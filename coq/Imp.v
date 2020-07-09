@@ -489,9 +489,10 @@ Fixpoint com_deps defs c : dependencies :=
     deps_comp deps_b (com_deps defs c)
   | CBlock locals block c =>
     let deps_locals : dependencies := mkffun (fun=> fset0) locals in
-    let deps_block := com_deps defs block in
+    let deps_block := deps_comp deps_locals (com_deps defs block) in
+    let deps_block' := mkffun deps_block (supp deps_block :\: locals) in
     let deps_c := com_deps defs c in
-    deps_comp deps_locals (deps_comp deps_block (deps_comp deps_locals deps_c))
+    deps_comp deps_block' deps_c
   end.
 
 Lemma supp_com_deps defs c : fsubset (supp (com_deps defs c)) (com_mod_vars c).
@@ -505,8 +506,16 @@ elim: c.
   apply: fsubset_trans (supp_deps_comp _ _) _.
   apply: fsetUSS=> //; exact: supp_mkffun_subset.
 - move=> /= locals block IHblock c IHc.
-  admit.
-Admitted.
+  set deps_locals := mkffun (fun=> fset0) locals.
+  set deps_block := deps_comp deps_locals (com_deps defs block).
+  set deps_block' := mkffun deps_block _.
+  apply: fsubset_trans (supp_deps_comp _ _) _.
+  apply: fsetUSS=> //.
+  apply: fsubset_trans (supp_mkffun_subset _ _ _) _.
+  rewrite fsubDset fsetUDr fsetDv fsetD0.
+  apply: fsubset_trans (supp_deps_comp _ _) _.
+  by rewrite fsetUSS // supp_mkffun_subset.
+Qed.
 
 Lemma com_depsP defs c : deps_spec (com_deps defs c) (run defs c).
 Proof.
@@ -566,10 +575,18 @@ elim: c.
   set deps_b' := if b2 then deps_then else deps_else.
   have IHcb : deps_spec deps_b' (run defs cb).
     by rewrite /deps_b' /cb; case: (b2).
-  have {}IHcb : deps_spec deps_b (run defs cb).
-    apply: deps_specW IHcb=> v1; apply/fsubsetP=> v2.
-    admit.
-  by apply: IHcb.
+  have sub_deps v : fsubset (deps_b' v) (deps_then v :|: deps_else v).
+    by rewrite /deps_b'; case: (b2); rewrite ?fsubsetUr ?fsubsetUl.
+  suff {}IHcb' : deps_spec deps_b (run defs cb) by apply: IHcb'.
+  apply: deps_specW IHcb=> v1; apply: fsubset_trans (sub_deps v1) _.
+  rewrite /deps_b mkffunE; case: ifPn=> [in_mod|nin_mod].
+    by rewrite /deps_b_def -fsetUA fsubsetUr.
+  move: nin_mod; rewrite in_fsetU; case/norP=> nin_then nin_else.
+  have /suppPn -> : v1 \notin supp deps_then.
+    by apply: contra nin_then; apply/fsubsetP/supp_com_deps.
+  have /suppPn -> : v1 \notin supp deps_else.
+    by apply: contra nin_else; apply/fsubsetP/supp_com_deps.
+  by rewrite fsetUid fsubsetxx.
 - admit.
 Admitted.
 

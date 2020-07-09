@@ -12,6 +12,13 @@ Local Open Scope fset_scope.
 
 (* Consolidate this stuff in extructures. *)
 
+Lemma fsetUDr (T : ordType) (A B C : {fset T}) :
+  A :|: B :\: C = (A :|: B) :\: (C :\: A).
+Proof.
+apply/eq_fset=> x; rewrite !(in_fsetU, in_fsetD).
+by case: (x \in A).
+Qed.
+
 Lemma bigcupS (I : eqType) (T : ordType) (P : I -> bool) (F : I -> {fset T}) s X :
   reflect (forall i : I, i \in s -> P i -> fsubset (F i) X)
           (fsubset (\bigcup_(i <- s | P i) F i) X).
