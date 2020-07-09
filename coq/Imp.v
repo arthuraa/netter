@@ -694,6 +694,36 @@ have [v_supp|v_supp] := boolP (v \in supp deps).
 by move: v'_deps; rewrite (suppPn v_supp) => /fset1P ->.
 Qed.
 
+Fixpoint dead_store_elim defs c live :=
+  match c with
+  | CSkip => CSkip
+  | CAssn assn c =>
+    let live' := lift_deps (com_deps defs c) live      in
+    let assn' := filterm (fun v _ => v \in live') assn in
+    let c'    := dead_store_elim defs c live           in
+    CAssn assn' c'
+  | CIf e cthen celse c =>
+    let live'  := lift_deps (com_deps defs c) live in
+    let cthen' := dead_store_elim defs cthen live' in
+    let celse' := dead_store_elim defs celse live' in
+    let c'     := dead_store_elim defs c live      in
+    CIf e cthen' celse' c'
+  | CBlock locals block c =>
+    let live'  := lift_deps (com_deps defs c) live  in
+    let live'' := live' :\: locals                  in
+    let block' := dead_store_elim defs block live'' in
+    let c'     := dead_store_elim defs c live       in
+    CBlock locals block' c'
+  end.
+
+Lemma dead_store_elimP defs c live st1 st2 :
+  let deps := com_deps defs c in
+  let R vs st1 st2 := {in vs, st1 =1 st2} in
+  let c' := dead_store_elim defs c live in
+  R (lift_deps deps live) st1 st2 ->
+  coupling (R live) (run defs c st1) (run defs c' st2).
+Proof. Admitted.
+
 Module Inlining.
 
 Module Type CONFLICTS.
