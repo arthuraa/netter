@@ -587,8 +587,40 @@ elim: c.
   have /suppPn -> : v1 \notin supp deps_else.
     by apply: contra nin_else; apply/fsubsetP/supp_com_deps.
   by rewrite fsetUid fsubsetxx.
-- admit.
-Admitted.
+- move=> locals block IHblock c IHc /=.
+  set reset := mkffun (fun=> fset0) locals.
+  set deps_block0 := com_deps defs block in IHblock *.
+  set deps_block1 := deps_comp reset deps_block0 in IHblock *.
+  set deps_block2 := mkffun deps_block1 _.
+  set deps_c := com_deps defs c in IHc *.
+  set zeroed := mkfmapf (fun=> 0%R) locals.
+  pose zero st := updm st zeroed.
+  pose f st := sample: st' <- run defs block (zero st);
+               dirac (updm st' (mkfmapf st locals)).
+  suff compP : deps_spec (deps_comp deps_block2 deps_c)
+                         (fun st => sample: st' <- f st; run defs c st').
+    move=> st1 st2 vs R12; move: (compP _ _ _ R12); rewrite /f !sampleA.
+    by do 2![under [in _ _ (fun _ => sample _ _)]eq_sample do rewrite sample_diracL].
+  have deps_zero : deps_spec reset (dirac \o zero).
+    move=> st1 st2 vs R12; apply: coupling_dirac => v v_vs.
+    rewrite /zero !updmE mkfmapfE; case: ifP=> // v_locals.
+    apply: R12; apply/bigcupP.
+    by exists v; rewrite // mkffunE v_locals in_fset1.
+  have IHblock1 := deps_compP deps_zero IHblock.
+  rewrite -/deps_block1 in IHblock1.
+  apply: deps_compP IHc => R st1 st2 vs R12; rewrite /f.
+  have /IHblock1 R12': R (\bigcup_(v <- vs :\: locals) deps_block1 v) st1 st2.
+    move=> v /bigcupP [] v' /fsetDP [v'_vs v'_locals] _ v_v'; apply: R12.
+    apply/bigcupP; exists v'; rewrite // mkffunE.
+    case: ifPn=> //; rewrite in_fsetD negb_and negbK.
+    by rewrite (negbTE v'_locals) => /suppPn <-.
+  rewrite /= !sample_diracL in R12'; apply: coupling_sample R12' _.
+  move=> st1' st2' _ _ R12'; apply: coupling_dirac => v v_vs.
+  rewrite !updmE !mkfmapfE; case: ifPn=> v_locals; last first.
+    by apply: R12'; apply/fsetDP.
+  apply: R12; apply/bigcupP; exists v; rewrite // mkffunE.
+  by rewrite in_fsetD v_locals in_fset1.
+Qed.
 
 Module Inlining.
 
