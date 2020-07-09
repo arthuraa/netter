@@ -622,6 +622,74 @@ elim: c.
   by rewrite in_fsetD v_locals in_fset1.
 Qed.
 
+Fixpoint live_vars_loop k deps (vs : {fset var}) :=
+  if k is k.+1 then
+    let next := \bigcup_(v <- vs) deps v in
+    if fsubset next vs then vs else live_vars_loop k deps (vs :|: next)
+  else vs.
+
+Lemma fsubset_live_vars_loop k deps vs : fsubset vs (live_vars_loop k deps vs).
+Proof.
+elim: k vs=> [|k IH] //= vs; first exact: fsubsetxx.
+case: ifP=> _; rewrite ?fsubsetxx //.
+by apply: fsubset_trans (IH _); rewrite fsubsetUl.
+Qed.
+
+Lemma live_vars_loopP k deps vs0 vs :
+  size (vs :\: vs0) <= k ->
+  fsubset vs0 vs ->
+  (forall v, v \in vs -> fsubset (deps v) vs) ->
+  let fp := live_vars_loop k deps vs0 in
+  fp = fp :|: \bigcup_(v <- fp) deps v.
+Proof.
+move=> hsize sub_vs sub_deps fp.
+elim: k vs0 @fp hsize sub_vs=> [|k IH] vs0.
+  rewrite /= leqn0 sizes_eq0 -fsubset0 fsubDset fsetU0.
+  move=> sub1 sub2; have -> : vs0 = vs.
+    by apply/eqP; rewrite eqEfsubset sub2.
+  apply/esym/fsetUidPl/fsubsetP=> v /bigcupP [] v' v'_vs _.
+  apply/fsubsetP; exact: sub_deps.
+rewrite [live_vars_loop _ _ _]/=.
+set next := \bigcup_(v <- vs0) deps v.
+have [sub_next /= _ _|not_sub] := boolP (fsubset next vs0).
+  exact/esym/fsetUidPl.
+move=> fp hsize sub_vs.
+have sub_next : fsubset next vs.
+  apply/bigcupS=> v /(fsubsetP sub_vs) v_vs _.
+  exact: sub_deps.
+have /fset0Pn [v /fsetDP [v_next v_vs0]] : next :\: vs0 != fset0.
+  by rewrite -fsubset0 fsubDset fsetU0.
+have leq_size : size (vs :\: (vs0 :|: next)) < size (vs :\: vs0).
+  rewrite [in X in _ < X](sizesD1 v) in_fsetD.
+  rewrite v_vs0 (fsubsetP sub_next _ v_next) ltnS.
+  by rewrite fsubset_leq_size ?fsetDDl ?fsetDS ?fsetUS ?fsub1set.
+apply: IH; first exact: leq_trans leq_size hsize.
+by rewrite fsubUset sub_vs.
+Qed.
+
+Definition live_vars defs c vs0 :=
+  let deps := com_deps defs c in
+  let vs   := vs0 :|: \bigcup_(v <- supp deps) deps v in
+  live_vars_loop (size vs) deps vs0.
+
+Lemma fsubset_live_vars defs c vs0 : fsubset vs0 (live_vars defs c vs0).
+Proof. exact: fsubset_live_vars_loop. Qed.
+
+Lemma live_varsP defs c vs0 :
+  let deps := com_deps defs c in
+  let vs := live_vars defs c vs0 in
+  vs = vs :|: \bigcup_(v <- vs) deps v.
+Proof.
+move=> deps; rewrite /live_vars -/deps; set vs := vs0 :|: _.
+apply: (@live_vars_loopP _ _ _ vs).
+- by rewrite fsubset_leq_size // fsubDset fsubsetUr.
+- exact: fsubsetUl.
+move=> v v_vs; apply/fsubsetP=> v' v'_deps.
+have [v_supp|v_supp] := boolP (v \in supp deps).
+  by apply/fsetUP; right; apply/bigcupP; exists v.
+by move: v'_deps; rewrite (suppPn v_supp) => /fset1P ->.
+Qed.
+
 Module Inlining.
 
 Module Type CONFLICTS.
