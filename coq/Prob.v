@@ -535,6 +535,19 @@ Lemma couplingW (T S : ordType) (R1 R2 : T -> S -> Prop) pT pS :
   coupling R2 pT pS.
 Proof. by move=> R12 [p eT eS R1P]; exists p; eauto. Qed.
 
+Lemma in_couplingW (T S : ordType) (R1 R2 : T -> S -> Prop) (pT : {prob T}) (pS : {prob S}) :
+  (forall x y, x \in supp pT -> y \in supp pS -> R1 x y -> R2 x y) ->
+  coupling R1 pT pS ->
+  coupling R2 pT pS.
+Proof.
+move=> R12 [p eT eS R1P]; exists p; eauto.
+case=> x y xyP; apply: R12; last exact: R1P.
+- rewrite eT; apply/supp_sampleP.
+  by exists (x, y)=> //; rewrite // supp_dirac in_fset1.
+- rewrite eS; apply/supp_sampleP.
+  by exists (x, y)=> //; rewrite // supp_dirac in_fset1.
+Qed.
+
 Definition foldrM T (S : ordType) (f : T -> S -> {prob S}) (y : S) (xs : seq T) : {prob S} :=
   foldr (fun x p => sample p (f x)) (dirac y) xs.
 
@@ -905,3 +918,61 @@ by case: eqP=> //= ->; rewrite sample_diracL.
 Qed.
 
 End MapFunProb.
+
+Lemma coupling_mapm_p (T S11 S12 S21 S22 : ordType)
+    (R1 : T -> S11 -> S12 -> Prop) (R2 : T -> S21 -> S22 -> Prop)
+    (f1 : S11 -> {prob S21}) (f2 : S12 -> {prob S22}) :
+  (forall x y1 y2, R1 x y1 y2 -> coupling (R2 x) (f1 y1) (f2 y2)) ->
+  forall (m1 : {fmap _}) (m2 : {fmap _}),
+    (forall x y1 y2, m1 x = Some y1 -> m2 x = Some y2 -> R1 x y1 y2) ->
+    coupling (fun (m1' : {fmap _}) (m2' : {fmap _}) =>
+                forall x y1 y2, m1' x = Some y1 -> m2' x = Some y2 -> R2 x y1 y2)
+             (mapm_p f1 m1) (mapm_p f2 m2).
+Proof.
+move=> RP; elim/fmap_rect.
+  rewrite mapm_p0; move=> m2 em; apply: coupling_trivial.
+  move=> _ m2' /supp_diracP -> //.
+move=> m1 IH x y1 fresh m2 em.
+have y1P y2 : m2 x = Some y2 -> R1 x y1 y2.
+  by apply: em; rewrite setmE eqxx.
+have /IH {}em x' y1' y2 : m1 x' = Some y1' -> m2 x' = Some y2 -> R1 x' y1' y2.
+  move=> m1x' m2x'; apply: em; rewrite // setmE.
+  by case: eqP m1x'=> // ->; rewrite (dommPn fresh).
+case m2x: (m2 x)=> [y2|].
+  rewrite -(setmI m2x) !mapm_p_setm; apply: coupling_sample em _.
+  move=> /= m1' m2' _ _ em'; apply: coupling_sample.
+    apply: RP; exact: y1P.
+  move=> y1' y2' _ _ yP; apply: coupling_dirac.
+  move=> x' y1'' y2''; rewrite !setmE; case: eqP=> [->|_].
+    by move=> [<-] [<-].
+  exact: em'.
+rewrite mapm_p_setm -[mapm_p _ m2]sample_diracR.
+apply: coupling_sample em _ => m1' m2' _ /supp_mapm_pP [ed2 _].
+move=> {}em; apply: coupling_sampleL=> y1' _; apply: coupling_dirac.
+move=> x' y1'' y2''; rewrite setmE; case: eqP=> [->|_]; last exact: em.
+by have /dommPn -> : x \notin domm m2' by rewrite -ed2 mem_domm m2x.
+Qed.
+
+Lemma coupling_mapm_p_eq (T S1 S2 : ordType) (f : S1 -> {prob S2}) (m1 m2 : {fmap T -> S1}) (P : T -> bool) :
+  {in P, m1 =1 m2} ->
+  coupling (fun m1' m2' : {fmap T -> S2} => {in P, m1' =1 m2'}) (mapm_p f m1) (mapm_p f m2).
+Proof.
+move=> em.
+pose R1 x (y1 y2 : S1) := P x -> y1 = y2.
+pose R2 x (y1' y2' : S2) := P x -> y1' = y2'.
+have emW x y1 y2 : m1 x = Some y1 -> m2 x = Some y2 -> R1 x y1 y2.
+  move=> m1x m2x Px; apply: Some_inj; rewrite -m1x -m2x; exact: em.
+have RP x y1 y2 : R1 x y1 y2 -> coupling (R2 x) (f y1) (f y2).
+  move=> xP; case: (boolP (P x))=> [{}/xP ->|nPx].
+    apply: couplingW; last exact: coupling_same.
+    by move=> ?? ->.
+  apply: coupling_trivial=> ?? _ _ contra; by rewrite contra in nPx.
+apply: in_couplingW; last by apply: coupling_mapm_p emW; eauto.
+move=> /= m1' m2' /supp_mapm_pP [ed1 _] /supp_mapm_pP [ed2 _].
+move=> em' x Px.
+case m1'x: (m1' x)=> [y1'|].
+  suff /dommP [y2' m2'x] : x \in domm m2'.
+    by rewrite m2'x (em' _ _ _ m1'x m2'x) // mem_domm.
+  by rewrite -ed2 mem_domm -em // -mem_domm ed1 mem_domm m1'x.
+by apply/esym/dommPn; rewrite -ed2 mem_domm -em // -mem_domm ed1 mem_domm m1'x.
+Qed.
