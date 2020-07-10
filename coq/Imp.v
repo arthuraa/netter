@@ -244,12 +244,21 @@ Fixpoint com_mod_vars c : {fset var} :=
   | CBlock vs block c => (com_mod_vars block :\: vs) :|: com_mod_vars c
   end.
 
-Lemma com_mod_varsP defs c st st' v :
-  st' \in supp (run defs c st) ->
-  v \notin com_mod_vars c ->
-  st' v = st v.
+Definition modifies (f : state -> {prob state}) vs :=
+  forall st st' v, st' \in supp (f st) -> v \notin vs -> st' v = st v.
+
+Lemma modifiesW f vs vs' :
+  fsubset vs' vs ->
+  modifies f vs' ->
+  modifies f vs.
 Proof.
-elim: c st st'.
+move=> sub mod st st' v st'_f v_vs; apply: mod=> //.
+apply: contra v_vs; exact/fsubsetP.
+Qed.
+
+Lemma com_mod_varsP defs c : modifies (run defs c) (com_mod_vars c).
+Proof.
+move=> st st' v; elim: c st st'.
 - by move=> /= st st' /supp_diracP ->.
 - move=> /= assn c IH st st''.
   case/supp_sampleP=> st' /do_assnP-/(_ v).
@@ -418,10 +427,27 @@ Definition match_prob vs1 vs2 f g :=
     {in vs1, st1 =1 st2} ->
     coupling (fun st1' st2' => {in vs2, st1' =1 st2'}) (f st1) (g st2).
 
+Lemma match_probWL vs1' vs1 vs2 f g :
+  fsubset vs1 vs1' ->
+  match_prob vs1 vs2 f g ->
+  match_prob vs1' vs2 f g.
+Proof.
+move=> sub efg st1 st2 est; apply: efg=> v v_vs; apply: est.
+by apply/fsubsetP: v_vs.
+Qed.
+
 Definition dependencies := ffun (fun v : var => fset1 v).
 Implicit Types deps : dependencies.
 
 Definition lift_deps deps vs := \bigcup_(v <- vs) deps v.
+
+Lemma fsubset_lift_deps deps1 deps2 vs :
+  (forall v, v \in vs -> fsubset (deps1 v) (deps2 v)) ->
+  fsubset (lift_deps deps1 vs) (lift_deps deps2 vs).
+Proof.
+move=> sub; apply/fsubsetP=> v /bigcupP [] v' v'_vs _ v_v'.
+apply/bigcupP; exists v'=> //; apply/fsubsetP: v_v'; exact: sub.
+Qed.
 
 Definition deps_spec deps f :=
   forall vs, match_prob (lift_deps deps vs) vs f f .
@@ -439,6 +465,25 @@ Qed.
 Definition deps_comp deps deps' : dependencies :=
   mkffun (fun v => lift_deps deps (deps' v))
          (supp deps :|: supp deps').
+
+Lemma lift_deps_deps_comp deps deps' vs :
+  lift_deps (deps_comp deps deps') vs =
+  lift_deps deps (lift_deps deps' vs).
+Proof.
+apply/eq_fset=> v; apply/(sameP bigcupP)/(iffP bigcupP).
+- case=> v' /bigcupP [] v'' v''_vs _ v'_v'' _ v_v'.
+  exists v''; rewrite // mkffunE; case: ifPn.
+    by move=> _; apply/bigcupP; exists v'.
+  rewrite in_fsetU; case/norP=> /suppPn e'' /suppPn e'; rewrite -e''.
+  by move: v'_v'' v_v'; rewrite e'=> /fset1P ->.
+- case=> v'' v''_vs _; rewrite mkffunE; case: ifPn.
+    move=> _; case/bigcupP=> v' v'_v'' _ v_v'.
+    by exists v'=> //; apply/bigcupP; exists v''.
+  rewrite in_fsetU; case/norP=> /suppPn e'' /suppPn e' /fset1P e.
+  move: e' e'' v''_vs; rewrite -{}e {v''}=> e' e'' v_vs.
+  exists v; rewrite ?e'' ?in_fset1 //.
+  by apply/bigcupP; exists v; rewrite ?e' ?in_fset1.
+Qed.
 
 Lemma supp_deps_comp deps deps' :
   fsubset (supp (deps_comp deps deps')) (supp deps :|: supp deps').
@@ -479,7 +524,7 @@ Definition assn_deps defs assn : dependencies :=
                else fset1 v in
   mkffun def (domm assn).
 
-Lemma assn_depsP2 defs assn1 assn2 vs :
+Lemma assn_depsP defs assn1 assn2 vs :
   {in vs, assn1 =1 assn2} ->
   match_prob (lift_deps (assn_deps defs assn1) vs) vs
              (do_assn defs assn1) (do_assn defs assn2).
@@ -498,6 +543,62 @@ apply: est; apply/bigcupP; exists v; rewrite // mkffunE.
 by rewrite ed1 mem_domm es_v in_fset1.
 Qed.
 
+Definition if_deps defs e deps_then deps_else mod : dependencies :=
+  let ve := bexpr_vars defs e in
+  let deps_b v := ve :|: deps_then v :|: deps_else v in
+  mkffun (fun v => ve :|: deps_then v :|: deps_else v) mod.
+
+Lemma if_depsP defs e dt ft1 ft2 de fe1 fe2 mod vs :
+  match_prob (lift_deps dt vs) vs ft1 ft2 ->
+  match_prob (lift_deps de vs) vs fe1 fe2 ->
+  fsubset (supp dt) mod -> fsubset (supp de) mod ->
+  modifies ft1 mod -> modifies ft2 mod -> modifies fe1 mod -> modifies fe2 mod ->
+  match_prob (lift_deps (if_deps defs e dt de mod) vs) vs
+             (fun st => if feval_bexpr defs st e then ft1 st else fe1 st)
+             (fun st => if feval_bexpr defs st e then ft2 st else fe2 st).
+Proof.
+move=> dtP deP dt_mod de_mod ft1_mod ft2_mod fe1_mod fe2_mod.
+pose ite ft fe st : {prob state} :=
+  if feval_bexpr defs st e then ft st else fe st.
+rewrite -/(ite ft1 fe1) -/(ite ft2 fe2).
+have f1_mod : modifies (ite ft1 fe1) mod.
+  by move=> st st' v; rewrite /ite; case: ifP=> _; eauto.
+have f2_mod : modifies (ite ft2 fe2) mod.
+  by move=> st st' v; rewrite /ite; case: ifP=> _; eauto.
+move=> st1 st2 est.
+have [dis|not_dis] := boolP (fdisjoint vs mod).
+  have evs : lift_deps (if_deps defs e dt de mod) vs = vs.
+    rewrite /lift_deps big_seq.
+    under eq_big=> [v|v v_vs]; first over.
+      rewrite mkffunE ifF; last exact/negbTE/(fdisjointP dis).
+      over.
+    by rewrite -big_seq bigcup1 fsvalK.
+  apply: coupling_trivial=> st1' st2' /f1_mod st1'P /f2_mod st2'P v v_vs.
+  have ? : v \notin mod by apply/fdisjointP: v_vs.
+  by rewrite st1'P ?st2'P ?est ?evs.
+set vs' := lift_deps _ _ in est *.
+have sub : fsubset (bexpr_vars defs e) vs'.
+  have /fset0Pn [v /fsetIP [v_vs v_mod]] := not_dis.
+  apply: fsubset_trans; last by apply: bigcup_sup; eauto.
+  by rewrite mkffunE v_mod -fsetUA fsubsetUl.
+have estW : {in bexpr_vars defs e, st1 =1 st2}.
+  move=> v /(fsubsetP sub) v_vs; exact: est.
+rewrite /ite; under eq_in_feval_bexpr => ?? do rewrite estW //.
+have dtP' : match_prob vs' vs ft1 ft2.
+  apply: match_probWL dtP; apply: fsubset_lift_deps=> v v_vs.
+  rewrite mkffunE -fsetUA; case: ifPn=> v_mod.
+    by rewrite fsubsetU ?fsubsetUl ?orbT.
+  suff /suppPn -> : v \notin supp dt by rewrite fsubsetxx.
+  by apply: contra v_mod; apply/fsubsetP.
+have deP' : match_prob vs' vs fe1 fe2.
+  apply: match_probWL deP; apply: fsubset_lift_deps=> v v_vs.
+  rewrite mkffunE -fsetUA; case: ifPn=> v_mod.
+    by rewrite fsubsetU ?fsubsetUr ?orbT.
+  suff /suppPn -> : v \notin supp de by rewrite fsubsetxx.
+  by apply: contra v_mod; apply/fsubsetP.
+by case: feval_bexpr; eauto.
+Qed.
+
 Fixpoint com_deps defs c : dependencies :=
   match c with
   | CSkip => emptyf
@@ -507,10 +608,8 @@ Fixpoint com_deps defs c : dependencies :=
   | CIf e cthen celse c =>
     let deps_then := com_deps defs cthen in
     let deps_else := com_deps defs celse in
-    let ve := bexpr_vars defs e in
     let mod := com_mod_vars cthen :|: com_mod_vars celse in
-    let deps_b_def v := ve :|: deps_then v :|: deps_else v in
-    let deps_b := mkffun deps_b_def mod in
+    let deps_b := if_deps defs e deps_then deps_else mod in
     deps_comp deps_b (com_deps defs c)
   | CBlock locals block c =>
     let deps_locals : dependencies := mkffun (fun=> fset0) locals in
@@ -552,56 +651,18 @@ elim: c.
     + by case=> v' v'_vs _; rewrite emptyfE => /fset1P ->.
   exact: coupling_dirac.
 - move=> /= assn c IH; apply: deps_compP=> // vs st1 st2 e12.
-  exact: assn_depsP2.
+  exact: assn_depsP.
 - move=> /= e cthen IHthen celse IHelse c IHc.
   apply: deps_compP=> // vs st1 st2.
   set deps_then := com_deps defs cthen.
   set deps_else := com_deps defs celse.
-  set ve := bexpr_vars defs e.
   set mod := com_mod_vars cthen :|: com_mod_vars celse.
-  set deps_b_def := fun v => ve :|: deps_then v :|: deps_else v.
-  set deps_b := mkffun deps_b_def mod.
-  set b1 := feval_bexpr defs st1 e.
-  set b2 := feval_bexpr defs st2 e.
-  have [dis|not_dis] := boolP (fdisjoint vs mod).
-    rewrite /lift_deps big_seq; under eq_big=> [?|v v_vs]; first over.
-      rewrite /deps_b mkffunE (negbTE (fdisjointP dis _ v_vs)); over.
-    rewrite -big_seq bigcup1 fsvalK => R12.
-    apply: coupling_trivial=> st1' st2' st1'P st2'P v v_vs.
-    have v_mod := fdisjointP dis _ v_vs.
-    have {}v_mod b : v \notin com_mod_vars (if b then cthen else celse).
-      apply: contra v_mod; rewrite /mod in_fsetU.
-      case: b=> -> //; exact: orbT.
-    have -> : st1' v = st1 v by exact: com_mod_varsP st1'P (v_mod b1).
-    have -> : st2' v = st2 v by exact: com_mod_varsP st2'P (v_mod b2).
-    exact: R12.
-  set vs' := \bigcup_(v <- vs) deps_b v.
-  have sub : fsubset ve vs'.
-    have [v v_vs v_mod] : exists2 v, v \in vs & v \in mod.
-      by case/fset0Pn: not_dis=> v /fsetIP [] ??; exists v.
-    have sub : fsubset ve (deps_b v).
-      by rewrite /deps_b mkffunE v_mod /deps_b_def -fsetUA fsubsetUl.
-    apply: fsubset_trans sub _.
-    exact: bigcup_sup.
-  move=> R12; have R12' : {in ve, st1 =1 st2}.
-    by move=> v v_ve; apply: R12; apply/fsubsetP: v_ve.
-  have -> : b1 = b2 by apply/eq_in_feval_bexpr.
-  set cb := if b2 then cthen else celse.
-  set deps_b' := if b2 then deps_then else deps_else.
-  have IHcb : deps_spec deps_b' (run defs cb).
-    by rewrite /deps_b' /cb; case: (b2).
-  have sub_deps v : fsubset (deps_b' v) (deps_then v :|: deps_else v).
-    by rewrite /deps_b'; case: (b2); rewrite ?fsubsetUr ?fsubsetUl.
-  suff {}IHcb' : deps_spec deps_b (run defs cb) by apply: IHcb'.
-  apply: deps_specW IHcb=> v1; apply: fsubset_trans (sub_deps v1) _.
-  rewrite /deps_b mkffunE; case: ifPn=> [in_mod|nin_mod].
-    by rewrite /deps_b_def -fsetUA fsubsetUr.
-  move: nin_mod; rewrite in_fsetU; case/norP=> nin_then nin_else.
-  have /suppPn -> : v1 \notin supp deps_then.
-    by apply: contra nin_then; apply/fsubsetP/supp_com_deps.
-  have /suppPn -> : v1 \notin supp deps_else.
-    by apply: contra nin_else; apply/fsubsetP/supp_com_deps.
-  by rewrite fsetUid fsubsetxx.
+  rewrite 2!fun_if 2!if_arg.
+  have mod_then : modifies (run defs cthen) mod.
+    apply: modifiesW (@com_mod_varsP _ _); exact: fsubsetUl.
+  have mod_else : modifies (run defs celse) mod.
+    apply: modifiesW (@com_mod_varsP _ _); exact: fsubsetUr.
+  by apply: if_depsP; rewrite // fsubsetU // supp_com_deps ?orbT.
 - move=> locals block IHblock c IHc /=.
   set reset := mkffun (fun=> fset0) locals.
   set deps_block0 := com_deps defs block in IHblock *.
@@ -727,13 +788,25 @@ Fixpoint dead_store_elim defs c live :=
     CBlock locals block' c'
   end.
 
-Lemma dead_store_elimP defs c live st1 st2 :
+Lemma dead_store_elimP defs c live :
   let deps := com_deps defs c in
-  let R vs st1 st2 := {in vs, st1 =1 st2} in
   let c' := dead_store_elim defs c live in
-  R (lift_deps deps live) st1 st2 ->
-  coupling (R live) (run defs c st1) (run defs c' st2).
-Proof. Admitted.
+  match_prob (lift_deps deps live) live (run defs c) (run defs c').
+Proof.
+elim: c live.
+- move=> /= live st1 st2 est; apply: coupling_dirac=> v v_live.
+  by apply: est; apply/bigcupP; exists v; rewrite // emptyfE in_fset1.
+- move=> /= assn c IH live st1 st2; rewrite lift_deps_deps_comp=> est.
+  set live' := lift_deps _ live in est; apply: coupling_sample.
+    apply: assn_depsP est; rewrite -/live' => v v_live'.
+    by rewrite filtermE v_live'; case: (assn v).
+  move=> st1' st2' _ _; exact: IH.
+- move=> /= e cthen IHthen celse IHelse c IHc live st1 st2.
+  rewrite lift_deps_deps_comp; set live' := lift_deps _ live=> est.
+  apply: coupling_sample; last by move=> st1' st2' _ _; exact: IHc.
+  admit.
+- admit.
+Admitted.
 
 Module Inlining.
 
