@@ -35,7 +35,7 @@ Definition com_eqMixin := [derive eqMixin for com].
 Canonical com_eqType := EqType com com_eqMixin.
 
 Implicit Types (c : com) (assn : assignment) (σ : subst)
-  (st : state) (defs : formulas) (vs : {fset var}) (v : var).
+  (st : state) (defs : formulas) (vs locals : {fset var}) (v : var).
 
 Definition app_subst σ s :=
   if s is SVar v then σ v else ZSym s.
@@ -79,7 +79,7 @@ Definition DAssn σ := Assn (mapm dirac (val σ)).
 
 Definition Block vs c :=
   if vs == fset0 then c
-  else if c is CSkip then CSkip
+  else if c == CSkip then CSkip
   else CBlock vs c CSkip.
 
 Fixpoint Seq c1 c2 :=
@@ -150,6 +150,21 @@ under eq_mapm_p=> e do rewrite /=.
 by rewrite mapm_p_dirac sample_diracL.
 Qed.
 
+Definition do_block vs block st : {prob state} :=
+  let new := updm st (mkfmapf (fun=> 0%R) vs) in
+  sample: st' <- block new;
+  dirac (updm st' (mkfmapf st vs)).
+
+Lemma do_blockE (T : ordType) vs (block : state -> {prob state}) st (cont : state -> {prob T}) :
+  sample (do_block vs block st) cont =
+  (let new := updm st (mkfmapf (fun=> 0%R) vs) in
+   sample: st' <- block new;
+   cont (updm st' (mkfmapf st vs))).
+Proof.
+rewrite /= /do_block !sampleA.
+by under eq_sample do rewrite sample_diracL.
+Qed.
+
 Fixpoint run defs c st {struct c} : {prob state} :=
   match c with
   | CSkip =>
@@ -161,9 +176,8 @@ Fixpoint run defs c st {struct c} : {prob state} :=
     let branch := if feval_bexpr defs st e then cthen else celse in
     sample (run defs branch st) (run defs c)
   | CBlock vs block c =>
-    let new := updm st (mkfmapf (fun _ => 0%R) vs) in
-    sample: st' <- run defs block new;
-    run defs c (updm st' (mkfmapf st vs))
+    sample: st' <- do_block vs (run defs block) st;
+    run defs c st'
   end.
 
 Lemma run_Assn defs assn c st :
@@ -181,11 +195,12 @@ Lemma run_Block defs vs c st :
   run defs (Block vs c) st = run defs (CBlock vs c CSkip) st.
 Proof.
 rewrite /Block /=; case: eqP=> [->|_] //=.
-  rewrite (_ : updm st _ = st).
+  rewrite /= /do_block /= sampleA (_ : updm _ _ = st).
     rewrite -[LHS]sample_diracR; apply/eq_sample=> /= st'.
-    by congr dirac; apply/eq_ffun=> v; rewrite updmE /=.
+    by rewrite sample_diracL; congr dirac; apply/eq_ffun=> v; rewrite updmE /=.
   by apply/eq_ffun=> v /=; rewrite updmE /=.
-case: c=> //=; rewrite sample_diracL; congr dirac.
+case: eqP=> [->|] //=.
+rewrite /do_block sampleA !sample_diracL; congr dirac.
 apply/eq_ffun=> v; rewrite !updmE /= !mkfmapfE.
 by case: ifP=> // ->.
 Qed.
@@ -201,7 +216,7 @@ elim: c1 st=> /=.
   by rewrite IH.
 - move=> e cthen _ celse _ c1 IH st; rewrite /= sampleA.
   apply/eq_sample=> st'; exact: IH.
-- move=> vs c _ c' IH st; rewrite sampleA.
+- move=> vs c _ c' IH st; rewrite (lock do_block) sampleA.
   apply/eq_sample=> st'; exact: IH.
 Qed.
 
@@ -256,25 +271,34 @@ move=> sub mod st st' v st'_f v_vs; apply: mod=> //.
 apply: contra v_vs; exact/fsubsetP.
 Qed.
 
+Lemma do_block_mod vs locals block :
+  modifies block vs ->
+  modifies (do_block locals block) (vs :\: locals).
+Proof.
+move=> mod_block st st'' v /supp_sampleP [st' st'P /supp_diracP ->].
+rewrite updmE mkfmapfE in_fsetD negb_and negbK.
+have [//|v_locals v_vs] := boolP (v \in locals).
+by rewrite (mod_block _ _ _ st'P v_vs) updmE mkfmapfE (negbTE v_locals).
+Qed.
+
 Lemma com_mod_varsP defs c : modifies (run defs c) (com_mod_vars c).
 Proof.
-move=> st st' v; elim: c st st'.
-- by move=> /= st st' /supp_diracP ->.
-- move=> /= assn c IH st st''.
+elim: c.
+- by move=> /= st st' v /supp_diracP ->.
+- move=> /= assn c IH st st'' v.
   case/supp_sampleP=> st' /do_assnP-/(_ v).
   rewrite in_fsetU negb_or mem_domm.
   by case assn_v: (assn v)=> //= <-; eauto.
-- move=> /= e cthen IHthen celse IHelse c IH st st''.
+- move=> /= e cthen IHthen celse IHelse c IH st st'' v.
   case/supp_sampleP=> st' st'_supp st''_supp.
   rewrite !in_fsetU !negb_or -andbA; case/and3P=> cthenP celseP cP.
-  rewrite (IH _ _ st''_supp) //.
+  rewrite (IH _ _ _ st''_supp) //.
   by case: (feval_bexpr defs st e) st'_supp=> ?; eauto.
-- move=> /= vs block IHblock c IHc st st''.
+- move=> /= vs block IHblock c IHc st st'' v.
   case/supp_sampleP=> st' st'_supp st''_supp.
-  rewrite in_fsetU in_fsetD negb_or; case/andP=> v_mod v_c.
-  rewrite (IHc _ _ st''_supp v_c) updmE mkfmapfE.
-  case: (boolP (v \in vs)) v_mod=> //= v_vs v_block.
-  by rewrite (IHblock _ _ st'_supp v_block) updmE mkfmapfE (negbTE v_vs).
+  rewrite in_fsetU; case/norP=> v_block v_c.
+  rewrite (IHc _ _ _ st''_supp v_c).
+  exact: do_block_mod st'_supp v_block.
 Qed.
 
 Fixpoint com_read_vars defs c :=
@@ -336,6 +360,7 @@ move=> R; elim: c st1 st2.
   by rewrite /cb; case: (b); [apply: IHthen|apply: IHelse].
 - move=> /= vs' block IHblock c IHc st1 st2 vs.
   rewrite fsubUset fsubDset; case/andP=> sub_block sub_c R12.
+  rewrite 2!do_blockE /=.
   pose rb st := run defs block (updm st (mkfmapf (fun=> 0%R) vs')).
   have H1 : coupling (R (vs' :|: vs)) (rb st1) (rb st2).
     apply: IHblock=> // v; rewrite !updmE mkfmapfE.
@@ -415,6 +440,7 @@ move=> R; elim: c vs st1 st2.
     move=> v v_vs'; rewrite !updmE mkfmapfE; case: ifPn=> // v_locals.
     by apply: R12; apply/fsetUP; left; apply/fsetDP.
   have {}R12' := IHblock _ _ _ R12'.
+  rewrite 2!do_blockE /=.
   apply: coupling_sample R12' _ => st1' st2' _ _ {}R12'.
   apply: IHc; rewrite -/vs' => v v_vs'; rewrite !updmE !mkfmapfE.
   case: ifPn => v_locals.
@@ -599,6 +625,39 @@ have deP' : match_prob vs' vs fe1 fe2.
 by case: feval_bexpr; eauto.
 Qed.
 
+Definition block_deps defs (locals : {fset var}) db : dependencies :=
+  let deps_locals : dependencies := mkffun (fun=> fset0) locals in
+  let deps_block  := deps_comp deps_locals db in
+  mkffun deps_block (supp deps_block :\: locals).
+
+Lemma block_depsP defs locals db vs block1 block2 :
+  match_prob (lift_deps db (vs :\: locals)) (vs :\: locals) block1 block2 ->
+  match_prob (lift_deps (block_deps defs locals db) vs) vs
+             (do_block locals block1)
+             (do_block locals block2).
+Proof.
+rewrite /do_block /block_deps; move=> eb st1 st2.
+set reset := mkffun (fun=> fset0) locals.
+set deps_block1 := deps_comp reset db.
+set deps_block2 := mkffun deps_block1 _.
+set zeroed := mkfmapf (fun=> 0%R) locals.
+pose zero st := updm st zeroed => est.
+have est': {in lift_deps deps_block1 (vs :\: locals), st1 =1 st2}.
+  move=> v /bigcupP [] v' /fsetDP [v'_vs v'_locals] _ v_v'; apply: est.
+  apply/bigcupP; exists v'; rewrite // mkffunE.
+  case: ifPn=> //; rewrite in_fsetD negb_and negbK.
+  by rewrite (negbTE v'_locals) => /suppPn <-.
+rewrite lift_deps_deps_comp in est'.
+have {}est': {in lift_deps db (vs :\: locals), zero st1 =1 zero st2}.
+  move=> v v_vs; rewrite !updmE !mkfmapfE; case: ifP=> // v_locals.
+  by apply: est'; apply/bigcupP; exists v; rewrite // mkffunE v_locals in_fset1.
+apply: coupling_sample (eb _ _ est') _ => st1' st2' _ _ {}est'.
+apply: coupling_dirac=> v v_vs; rewrite !updmE !mkfmapfE.
+case: ifP=> v_locals; last by apply: est'; rewrite in_fsetD v_locals.
+apply: est.
+by apply/bigcupP; exists v; rewrite // mkffunE in_fsetD v_locals in_fset1.
+Qed.
+
 Fixpoint com_deps defs c : dependencies :=
   match c with
   | CSkip => emptyf
@@ -612,11 +671,7 @@ Fixpoint com_deps defs c : dependencies :=
     let deps_b := if_deps defs e deps_then deps_else mod in
     deps_comp deps_b (com_deps defs c)
   | CBlock locals block c =>
-    let deps_locals : dependencies := mkffun (fun=> fset0) locals in
-    let deps_block := deps_comp deps_locals (com_deps defs block) in
-    let deps_block' := mkffun deps_block (supp deps_block :\: locals) in
-    let deps_c := com_deps defs c in
-    deps_comp deps_block' deps_c
+    deps_comp (block_deps defs locals (com_deps defs block)) (com_deps defs c)
   end.
 
 Lemma supp_com_deps defs c : fsubset (supp (com_deps defs c)) (com_mod_vars c).
@@ -630,9 +685,6 @@ elim: c.
   apply: fsubset_trans (supp_deps_comp _ _) _.
   apply: fsetUSS=> //; exact: supp_mkffun_subset.
 - move=> /= locals block IHblock c IHc.
-  set deps_locals := mkffun (fun=> fset0) locals.
-  set deps_block := deps_comp deps_locals (com_deps defs block).
-  set deps_block' := mkffun deps_block _.
   apply: fsubset_trans (supp_deps_comp _ _) _.
   apply: fsetUSS=> //.
   apply: fsubset_trans (supp_mkffun_subset _ _ _) _.
@@ -664,38 +716,8 @@ elim: c.
     apply: modifiesW (@com_mod_varsP _ _); exact: fsubsetUr.
   by apply: if_depsP; rewrite // fsubsetU // supp_com_deps ?orbT.
 - move=> locals block IHblock c IHc /=.
-  set reset := mkffun (fun=> fset0) locals.
-  set deps_block0 := com_deps defs block in IHblock *.
-  set deps_block1 := deps_comp reset deps_block0 in IHblock *.
-  set deps_block2 := mkffun deps_block1 _.
-  set deps_c := com_deps defs c in IHc *.
-  set zeroed := mkfmapf (fun=> 0%R) locals.
-  pose zero st := updm st zeroed.
-  pose f st := sample: st' <- run defs block (zero st);
-               dirac (updm st' (mkfmapf st locals)).
-  suff compP : deps_spec (deps_comp deps_block2 deps_c)
-                         (fun st => sample: st' <- f st; run defs c st').
-    move=> st1 st2 vs R12; move: (compP _ _ _ R12); rewrite /f !sampleA.
-    by do 2![under [in _ _ (fun _ => sample _ _)]eq_sample do rewrite sample_diracL].
-  have deps_zero : deps_spec reset (dirac \o zero).
-    move=> st1 st2 vs R12; apply: coupling_dirac => v v_vs.
-    rewrite /zero !updmE mkfmapfE; case: ifP=> // v_locals.
-    apply: R12; apply/bigcupP.
-    by exists v; rewrite // mkffunE v_locals in_fset1.
-  have IHblock1 := deps_compP deps_zero IHblock.
-  rewrite -/deps_block1 in IHblock1.
-  apply: deps_compP IHc => vs st1 st2 R12; rewrite /f.
-  have /IHblock1 R12': {in lift_deps deps_block1 (vs :\: locals), st1 =1 st2}.
-    move=> v /bigcupP [] v' /fsetDP [v'_vs v'_locals] _ v_v'; apply: R12.
-    apply/bigcupP; exists v'; rewrite // mkffunE.
-    case: ifPn=> //; rewrite in_fsetD negb_and negbK.
-    by rewrite (negbTE v'_locals) => /suppPn <-.
-  rewrite /= !sample_diracL in R12'; apply: coupling_sample R12' _.
-  move=> st1' st2' _ _ R12'; apply: coupling_dirac => v v_vs.
-  rewrite !updmE !mkfmapfE; case: ifPn=> v_locals; last first.
-    by apply: R12'; apply/fsetDP.
-  apply: R12; apply/bigcupP; exists v; rewrite // mkffunE.
-  by rewrite in_fsetD v_locals in_fset1.
+  apply: deps_compP=> // vs st1 st2.
+  exact: block_depsP.
 Qed.
 
 Fixpoint live_vars_loop k deps (vs : {fset var}) :=
@@ -766,31 +788,37 @@ have [v_supp|v_supp] := boolP (v \in supp deps).
 by move: v'_deps; rewrite (suppPn v_supp) => /fset1P ->.
 Qed.
 
-Fixpoint dead_store_elim defs c live :=
+Fixpoint dead_store_elim_loop defs c live :=
   match c with
   | CSkip => CSkip
   | CAssn assn c =>
     let live' := lift_deps (com_deps defs c) live      in
     let assn' := filterm (fun v _ => v \in live') assn in
-    let c'    := dead_store_elim defs c live           in
+    let c'    := dead_store_elim_loop defs c live           in
     CAssn assn' c'
   | CIf e cthen celse c =>
     let live'  := lift_deps (com_deps defs c) live in
-    let cthen' := dead_store_elim defs cthen live' in
-    let celse' := dead_store_elim defs celse live' in
-    let c'     := dead_store_elim defs c live      in
+    let cthen' := dead_store_elim_loop defs cthen live' in
+    let celse' := dead_store_elim_loop defs celse live' in
+    let c'     := dead_store_elim_loop defs c live      in
     CIf e cthen' celse' c'
   | CBlock locals block c =>
     let live'  := lift_deps (com_deps defs c) live  in
     let live'' := live' :\: locals                  in
-    let block' := dead_store_elim defs block live'' in
-    let c'     := dead_store_elim defs c live       in
+    let block' := dead_store_elim_loop defs block live'' in
+    let c'     := dead_store_elim_loop defs c live       in
     CBlock locals block' c'
   end.
 
-Lemma dead_store_elimP defs c live :
+Lemma dead_store_elim_loop_com_mod_vars defs c live :
+  fsubset (com_mod_vars (dead_store_elim_loop defs c live)) (com_mod_vars c).
+Proof.
+by elim: c live => *; rewrite /= ?fsetUSS ?fsubsetxx ?domm_filter ?fsetSD.
+Qed.
+
+Lemma dead_store_elim_loopP defs c live :
   let deps := com_deps defs c in
-  let c' := dead_store_elim defs c live in
+  let c' := dead_store_elim_loop defs c live in
   match_prob (lift_deps deps live) live (run defs c) (run defs c').
 Proof.
 elim: c live.
@@ -804,9 +832,20 @@ elim: c live.
 - move=> /= e cthen IHthen celse IHelse c IHc live st1 st2.
   rewrite lift_deps_deps_comp; set live' := lift_deps _ live=> est.
   apply: coupling_sample; last by move=> st1' st2' _ _; exact: IHc.
-  admit.
-- admit.
-Admitted.
+  rewrite 2!fun_if 2!if_arg; apply: (if_depsP (IHthen _) (IHelse _)) est;
+  do 1?[apply: modifiesW (@com_mod_varsP _ _)];
+  by rewrite ?fsubsetUl ?fsubsetUr ?fsubsetU ?dead_store_elim_loop_com_mod_vars
+             ?supp_com_deps ?orbT.
+- move=> /= locals block IHblock c IHc live st1 st2.
+  rewrite lift_deps_deps_comp=> est.
+  apply: coupling_sample.
+    by apply: block_depsP; first exact: IHblock; eauto.
+  move=> ????; exact: IHc.
+Qed.
+
+Definition dead_store_elim defs c vs :=
+  let live := live_vars defs c vs in
+  dead_store_elim_loop defs c live.
 
 Module Inlining.
 
@@ -1124,7 +1163,7 @@ have wf3 st2 : st2 \in supp p2 -> wf_subst [::] σ3 (updm st2 r0).
   have v'_vs : v' \notin vs.
     apply: contra v'_cs2; apply/fsubsetP; exact: conflicts_sub.
   by rewrite updmE r0E (negbTE v'_vs).
-rewrite eblock; split.
+rewrite !do_blockE /= eblock; split.
   apply/eq_in_sample=> st2 {}/wf3 wf3.
   by have [{}ec wf4] := IHc _ _ _ _ wf3 ec.
 move=> st4 /supp_sampleP [st2 {}/wf3 wf3 st4_supp].
