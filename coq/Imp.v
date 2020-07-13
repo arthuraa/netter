@@ -571,7 +571,6 @@ Qed.
 
 Definition if_deps defs e deps_then deps_else mod : dependencies :=
   let ve := bexpr_vars defs e in
-  let deps_b v := ve :|: deps_then v :|: deps_else v in
   mkffun (fun v => ve :|: deps_then v :|: deps_else v) mod.
 
 Lemma if_depsP defs e dt ft1 ft2 de fe1 fe2 mod vs :
@@ -625,14 +624,14 @@ have deP' : match_prob vs' vs fe1 fe2.
 by case: feval_bexpr; eauto.
 Qed.
 
-Definition block_deps defs (locals : {fset var}) db : dependencies :=
+Definition block_deps (locals : {fset var}) db : dependencies :=
   let deps_locals : dependencies := mkffun (fun=> fset0) locals in
   let deps_block  := deps_comp deps_locals db in
   mkffun deps_block (supp deps_block :\: locals).
 
-Lemma block_depsP defs locals db vs block1 block2 :
+Lemma block_depsP locals db vs block1 block2 :
   match_prob (lift_deps db (vs :\: locals)) (vs :\: locals) block1 block2 ->
-  match_prob (lift_deps (block_deps defs locals db) vs) vs
+  match_prob (lift_deps (block_deps locals db) vs) vs
              (do_block locals block1)
              (do_block locals block2).
 Proof.
@@ -671,7 +670,7 @@ Fixpoint com_deps defs c : dependencies :=
     let deps_b := if_deps defs e deps_then deps_else mod in
     deps_comp deps_b (com_deps defs c)
   | CBlock locals block c =>
-    deps_comp (block_deps defs locals (com_deps defs block)) (com_deps defs c)
+    deps_comp (block_deps locals (com_deps defs block)) (com_deps defs c)
   end.
 
 Lemma supp_com_deps defs c : fsubset (supp (com_deps defs c)) (com_mod_vars c).
@@ -722,7 +721,7 @@ Qed.
 
 Fixpoint live_vars_loop k deps (vs : {fset var}) :=
   if k is k.+1 then
-    let next := \bigcup_(v <- vs) deps v in
+    let next := lift_deps deps vs in
     if fsubset next vs then vs else live_vars_loop k deps (vs :|: next)
   else vs.
 
@@ -892,7 +891,7 @@ Fixpoint dead_store_elim_opt_init defs c : mcom dependencies * dependencies * {f
     let: (mblock, deps_block, mod_block) := dead_store_elim_opt_init defs block in
     let: (mc, deps_c, mod_c) := dead_store_elim_opt_init defs c in
     (MBlock locals mblock deps_block mc deps_c,
-     deps_comp (block_deps defs locals deps_block) deps_c,
+     deps_comp (block_deps locals deps_block) deps_c,
      mod_block :\: locals :|: mod_c)
   end.
 

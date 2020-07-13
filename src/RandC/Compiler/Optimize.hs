@@ -13,6 +13,7 @@ import RandC.Pass
 import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
 import qualified RandC.Options as O
+import RandC.FFun (FFun)
 import qualified RandC.FFun as F
 
 
@@ -34,7 +35,6 @@ import Data.Map.Strict (Map)
 --
 --     2. @assn1@ and @assn2@ assign to disjoint sets of variables.
 --
--- This computation is done in the "Dependencies" module.
 
 -- | When an if statement has only two blocks of assignments, one in each
 -- branch, we can combine the two branches using a conditional expression.
@@ -197,48 +197,114 @@ inline Program{..} =
     return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
   else error "Inlining does not work with local definitions"
 
+type Dependencies = FFun Var (Set Var)
+
+mkdeps :: Map Var (Set Var) -> Dependencies
+mkdeps = F.mkffun S.singleton
+
+liftDeps :: Dependencies -> Set Var -> Set Var
+liftDeps deps vs = S.unions [deps F.! v | v <- S.toList vs]
+
+depsComp :: Dependencies -> Dependencies -> Dependencies
+depsComp deps deps' =
+  mkdeps $ M.fromList [(v, liftDeps deps (deps' F.! v))
+                      | v <- S.toList (S.union (F.supp deps) (F.supp deps'))]
+
+assnDeps :: Locals -> Map Var (G (P Expr)) -> Dependencies
+assnDeps defs assn =
+  let def v
+        | Just gp <- M.lookup v assn = stateDeps defs gp
+        | otherwise = S.singleton v in
+    mkdeps $ M.fromList [(v, def v) | v <- M.keys assn]
+
+ifDeps :: Locals -> Expr -> Dependencies -> Dependencies -> Set Var -> Dependencies
+ifDeps defs e deps_then deps_else mod =
+  let ve = stateDeps defs e in
+    mkdeps $ M.fromList [(v, S.unions [ve, deps_then F.! v, deps_else F.! v]) | v <- S.toList mod]
+
+blockDeps :: Set Var -> Dependencies -> Dependencies
+blockDeps locals db =
+  let deps_locals = mkdeps $ M.fromList [(v, S.empty) | v <- S.toList locals]
+      deps_block = depsComp deps_locals db in
+    mkdeps $ M.fromList [(v, deps_block F.! v) | v <- S.toList (F.supp deps_block)
+                                               , not (S.member v locals)]
+
+
+liveVarsLoop :: Int -> Dependencies -> Set Var -> Set Var
+liveVarsLoop k deps vs =
+  if k > 0 then
+    let next = liftDeps deps vs in
+      if S.isSubsetOf next vs then vs else liveVarsLoop (k - 1) deps (S.union vs next)
+  else vs
+
+data MCom a = MSkip
+            | MAssn (Map Var (G (P Expr))) (MCom a) a
+            | MIf Expr (MCom a) a (MCom a) a (MCom a) a
+            | MBlock (Set Var) (MCom a) a (MCom a) a
+
+deadStoreElimOptInit :: Locals -> [Instr] -> (MCom Dependencies, Dependencies, Set Var)
+deadStoreElimOptInit _ [] = (MSkip, mkdeps M.empty, S.empty)
+deadStoreElimOptInit defs (Assn assn : c) =
+  let (mc, deps_c, mod_c) = deadStoreElimOptInit defs c in
+    (MAssn assn mc deps_c,
+     depsComp (assnDeps defs assn) deps_c,
+     S.union (M.keysSet assn) mod_c)
+
+deadStoreElimOptInit defs (If e cthen celse : c) =
+  let (mcthen, deps_then, mod_then) = deadStoreElimOptInit defs (instrs cthen)
+      (mcelse, deps_else, mod_else) = deadStoreElimOptInit defs (instrs celse)
+      (mc, deps_c, mod_c) = deadStoreElimOptInit defs c
+      deps_b = ifDeps defs e deps_then deps_else (S.union mod_then mod_else) in
+    (MIf e mcthen deps_then mcelse deps_else mc deps_c,
+     depsComp deps_b deps_c,
+     S.unions [mod_then, mod_else, mod_c])
+
+deadStoreElimOptInit defs (Block locals block : c) =
+  let (mblock, deps_block, mod_block) = deadStoreElimOptInit defs (instrs block)
+      (mc, deps_c, mod_c) = deadStoreElimOptInit defs c in
+    (MBlock locals mblock deps_block mc deps_c,
+     depsComp (blockDeps locals deps_block) deps_c,
+     (mod_block S.\\ locals) `S.union` mod_c)
+
+deadStoreElimOptLoop :: MCom Dependencies -> Set Var -> [Instr]
+deadStoreElimOptLoop MSkip _ = []
+deadStoreElimOptLoop (MAssn assn mc deps_c) live =
+  let live' = liftDeps deps_c live
+      assn' = M.filterWithKey (\v _ -> v `S.member` live') assn
+      c'    = deadStoreElimOptLoop mc live in
+    Assn assn' : c'
+deadStoreElimOptLoop (MIf e mcthen _ mcelse _ mc deps_c) live =
+  let live' = liftDeps deps_c live
+      cthen' = deadStoreElimOptLoop mcthen live'
+      celse' = deadStoreElimOptLoop mcelse live'
+      c' = deadStoreElimOptLoop mc live in
+    If e (Com cthen') (Com celse') : c'
+deadStoreElimOptLoop (MBlock locals mblock _ mc deps_c) live =
+  let live' = liftDeps deps_c live
+      live'' = live' S.\\ locals
+      block' = deadStoreElimOptLoop mblock live''
+      c' = deadStoreElimOptLoop mc live in
+    Block locals (Com block') : c'
+
+deadStoreElimOpt :: Locals -> Com -> Set Var -> (Com, Set Var)
+deadStoreElimOpt defs c vs0 =
+  let (mc, deps_c, _) = deadStoreElimOptInit defs (instrs c)
+      vs = vs0 `S.union` liftDeps deps_c (F.supp deps_c)
+      live = liveVarsLoop (S.size vs) deps_c vs0 in
+    (Com $ deadStoreElimOptLoop mc live, live)
+
+trim :: Program -> Program
+trim Program{..} =
+  let keep0 = S.unions $ fmap (stateDeps pDefs) pRewards
+      (pCom', live) = deadStoreElimOpt pDefs pCom keep0
+      pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` live) pDefs
+      pVarDecls' = M.filterWithKey (\v _ -> v `S.member` live) pVarDecls in
+    Program{pVarDecls = pVarDecls', pCom = pCom', pDefs = pDefs', ..}
+
 substG :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
 substG f x = go x
   where go (G.Return x) = G.Return <$> traverse (substM f) x
         go (G.If e x y) = G.If <$> substM f e <*> go x <*> go y
-
-class NeedsVar a where
-  needsVar :: Locals -> Set Var -> a -> Set Var
-
-instance NeedsVar Com where
-  needsVar depMap vs (Com is) =
-    foldr (\i vs -> needsVar depMap vs i) vs is
-
-instance NeedsVar Instr where
-  needsVar depMap vs (Assn assn) =
-    let assn' = M.filterWithKey (\v _ -> v `S.member` vs) assn in
-      S.union vs (S.unions $ fmap (stateDeps depMap) assn')
-  needsVar depMap vs (If e cThen cElse) =
-    let vsThen = needsVar depMap vs cThen
-        vsElse = needsVar depMap vs cElse in
-      S.unions [stateDeps depMap e, vsThen, vsElse]
-  needsVar depMap vs (Block _ c) = needsVar depMap vs c
-
-class FilterVars a where
-  filterVars :: Set Var -> a -> a
-
-instance FilterVars Com where
-  filterVars vs (Com is) = Com [filterVars vs i | i <- is]
-
-instance FilterVars Instr where
-  filterVars vs (Assn assn) =
-    Assn $ M.filterWithKey (\v _ -> v `S.member` vs) assn
-  filterVars vs (If e cThen cElse) = If e (filterVars vs cThen) (filterVars vs cElse)
-  filterVars vs (Block vs' c) = Block (S.intersection vs vs') (filterVars vs c)
-
-trim :: Program -> Program
-trim Program{..} =
-  let keep0      = S.unions $ fmap (stateDeps pDefs) pRewards
-      keep1      = needsVar pDefs keep0 pCom
-      pVarDecls' = M.filterWithKey (\v _ -> v `S.member` keep1) pVarDecls
-      pDefs'     = M.filter (\(_, deps) -> deps `S.isSubsetOf` keep1) pDefs
-      pCom'      = filterVars keep1 pCom in
-    Program pVarDecls' pDefs' pRewards pCom'
 
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program
