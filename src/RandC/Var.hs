@@ -6,16 +6,22 @@
 {-# LANGUAGE UndecidableInstances #-}
 module RandC.Var
   (Var,
-   Vars,
+   VarGenS,
    VarGen,
    VarGenT(..),
    MonadFresh,
    name,
    runVarGenT,
-   novars,
+   varGenInit,
    fresh,
-   (|+|)) where
+   (|+|),
+   Renaming,
+   mkrenaming,
+   HasVars,
+   vars) where
 
+import RandC.FFun (FFun)
+import qualified RandC.FFun as F
 import GHC.Generics
 import Data.HashCons
 import Data.Text
@@ -42,19 +48,19 @@ instance Pretty Var where
   pretty (Var v) = pretty x <> pretty "_" <> pretty n
     where Var' x n = getVal v
 
-type Vars = M.Map Text Int
+type VarGenS = M.Map Text Int
 
 name :: Var -> Text
 name (Var v) = x
   where Var' x _ = getVal v
 
-novars :: Vars
-novars = M.empty
+varGenInit :: VarGenS
+varGenInit = M.empty
 
-newtype VarGenT m a = VarGenT (StateT Vars m a)
+newtype VarGenT m a = VarGenT (StateT VarGenS m a)
   deriving (Applicative,Functor,Monad)
 
-runVarGenT :: Monad m => VarGenT m a -> Vars -> m (a, Vars)
+runVarGenT :: Monad m => VarGenT m a -> VarGenS -> m (a, VarGenS)
 runVarGenT (VarGenT f) vs = runStateT f vs
 
 type VarGen a = VarGenT Identity a
@@ -97,3 +103,14 @@ cs1 |+| cs2 =
   let vs       = M.keysSet cs1 `S.union` M.keysSet cs2
       val cs v = M.findWithDefault 0 v cs in
   M.fromSet (\v -> val cs1 v + val cs2 v) vs
+
+type Renaming = FFun Var Var
+
+mkrenaming :: M.Map Var Var -> Renaming
+mkrenaming = F.mkffun id
+
+class HasVars a where
+  vars :: a -> S.Set Var
+
+instance HasVars Var where
+  vars = S.singleton

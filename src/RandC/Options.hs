@@ -16,7 +16,8 @@ data Target = Imp   -- ^ The internal representation of programs
   deriving (Ord, Eq, Read, Show, Data, Typeable)
 
 data Options = Options { target   :: Target         -- ^ The compilation target
-                       , inlining :: Bool           -- ^ Perform inlining
+                       , inlining :: Bool           -- ^ Inline assignments
+                       , trimming :: Bool           -- ^ Remove unused state variables
                        , merge    :: Bool           -- ^ Perform assignments in parallel when possible
                        , simplify :: Bool           -- ^ Perform simplications
                        , output   :: Maybe FilePath -- ^ Output file
@@ -26,7 +27,8 @@ data Options = Options { target   :: Target         -- ^ The compilation target
 defaultOptions :: Options
 defaultOptions =
   Options { target   = Prism   &= help "Output format"
-          , inlining = True    &= help "Perform inlining"
+          , inlining = True    &= help "Inline assignments"
+          , trimming = True    &= help "Remove unused state variables"
           , merge    = True    &= help "Perform assignments in parallel when possible"
           , simplify = True    &= help "Perform simplifications"
           , output   = Nothing &= help "Output file. If none is present, output to stdout."

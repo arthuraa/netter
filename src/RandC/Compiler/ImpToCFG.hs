@@ -1,7 +1,7 @@
 module RandC.Compiler.ImpToCFG where
 
 import RandC.Var
-import RandC.Dependencies
+import qualified RandC.Prism.Expr as PE
 import RandC.Options
 import RandC.G
 import RandC.Pass
@@ -25,15 +25,15 @@ newBlock block = do
   put (maxId + 1, M.insert maxId block blocks)
   return maxId
 
-compileCom :: StateDeps -> M.Map Var (Int, Int) -> Src.Com -> G Tgt.Id -> S (G Tgt.Id)
+compileCom :: PE.Locals -> M.Map Var (Int, Int) -> Src.Com -> G Tgt.Id -> S (G Tgt.Id)
 compileCom deps varDecls (Src.Com is) id = compileInstrs deps varDecls is id
 
-compileInstrs :: StateDeps -> M.Map Var (Int, Int) -> [Src.Instr] -> G Tgt.Id -> S (G Tgt.Id)
+compileInstrs :: PE.Locals -> M.Map Var (Int, Int) -> [Src.Instr] -> G Tgt.Id -> S (G Tgt.Id)
 compileInstrs _ _ [] next =
   return next
 compileInstrs deps varDecls (Src.Assn assn : is) next = do
   cNext <- compileInstrs deps varDecls is next
-  let cNextDeps = guardedStateDeps deps (\_ _ -> S.empty) cNext
+  let cNextDeps = PE.stateDeps deps cNext
   -- If the next PC value depends on a variable that is updated by the
   -- assignment, we have to create a dummy block for the conditional.
   if S.disjoint (M.keysSet assn) cNextDeps then do
@@ -60,14 +60,8 @@ compileInstrs deps varDecls (Src.Block vs c : is) next = do
 compile :: Src.Program -> Pass Tgt.Program
 compile prog = do
   Src.Program decls defs rews com <- ensureTarget CFG prog
-  -- In principle we should not have to compute this value again, since we
-  -- compute it already when optimizing the program.  However, the dependency
-  -- map could be invalidated after applying certain program transformations, so
-  -- it is safer to just recompute it.  If this turns out to be too slow, we can
-  -- always cache this somewhere in the future.
-  let deps = definitionStateDeps defs
   let initialState = (1, M.empty) -- We skip 0 since it will be the entry point of the program
-  let res = compileCom deps decls com (return 0)
+  let res = compileCom defs decls com (return 0)
   let (next, (maxId, blocks)) = runState res initialState
   let initialBlock = Tgt.Block M.empty next
   let blocks' = M.insert 0 initialBlock blocks

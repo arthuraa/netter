@@ -22,7 +22,7 @@ compileModule (id, Src.Module decls trans) =
 
 compile :: Src.Program -> Pass Tgt.Program
 compile (Src.Program defs rews mods) =
-  let defs' = [Tgt.Formula v e | (v, e) <- M.assocs defs]
+  let defs' = [Tgt.Formula v e | (v, (e, _)) <- M.assocs defs]
       rews' = [Tgt.Rewards v e | (v, e) <- M.assocs rews]
       mods' = map compileModule $ zip [0..] mods in
   return $ Tgt.Program defs' rews' mods'

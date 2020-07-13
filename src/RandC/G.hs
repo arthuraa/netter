@@ -45,9 +45,16 @@ flatten x = go [] x
   where go guards (Return x) = [(guards, x)]
         go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y
 
--- | Compute the vars that appear in a guarded expression, using another
--- function aVars to find the variables that appear at the leaves.
-vars :: (a -> S.Set Var) -> G a -> S.Set Var
-vars aVars x = go x
-  where go (Return x)   = aVars x
-        go (If e x1 x2) = S.unions [PE.vars e, go x1, go x2]
+toExpr :: G PE.Expr -> PE.Expr
+toExpr (Return e) = e
+toExpr (If e x y) = PE.If e (toExpr x) (toExpr y)
+
+instance HasVars a => HasVars (G a) where
+  vars (Return x)   = vars x
+  vars (If e x1 x2) = S.unions [vars e, vars x1, vars x2]
+
+instance HasStateDeps a => HasStateDeps (G a) where
+  stateDeps deps (Return x) =
+    stateDeps deps x
+  stateDeps deps (If e x1 x2) =
+    S.unions [stateDeps deps e, stateDeps deps x1, stateDeps deps x2]

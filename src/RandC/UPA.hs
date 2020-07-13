@@ -16,7 +16,7 @@ newtype Assn = Assn (M.Map Var Expr)
 data Module = Module (M.Map Var (Int, Int)) [(Expr, P Assn)]
   deriving (Show, Eq)
 
-data Program = Program { pDefs :: M.Map Var Expr
+data Program = Program { pDefs :: Locals
                        , pRewards :: M.Map Text [(Expr, Expr)]
                        , pMods :: [Module] }
   deriving (Show, Eq)
@@ -41,7 +41,7 @@ instance Pretty Module where
 instance Pretty Program where
   pretty Program{..} =
     vcat $ [ sep [pretty "def", pretty v, pretty "=", pretty e]
-           | (v, e) <- M.assocs pDefs] ++
+           | (v, (e, _)) <- M.assocs pDefs] ++
            [ sep [pretty "reward", pretty v, pretty "=", pretty e]
            | (v, e) <- M.assocs pRewards] ++
            map pretty pMods

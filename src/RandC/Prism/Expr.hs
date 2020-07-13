@@ -13,10 +13,13 @@ module RandC.Prism.Expr where
 
 
 import RandC.Var
+import RandC.Prob
 
 import GHC.Generics
 import Data.HashCons
 import Data.Functor.Identity
+import Data.Map.Strict (Map)
+import Data.Set (Set)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text.Prettyprint.Doc
@@ -248,13 +251,45 @@ simplify (If e eThen eElse) = let e'     = simplify e
                                   Const (Bool False) -> eElse'
                                   _ -> If e' eThen' eElse'
 
--- | Compute all of the variables that appear on an expression.
-vars :: Expr -> S.Set Var
-vars (Var v)            = S.singleton v
-vars (Const _)          = S.empty
-vars (UnOp _ e)         = vars e
-vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
-vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
+instance HasVars Expr where
+  vars (Var v)            = S.singleton v
+  vars (Const _)          = S.empty
+  vars (UnOp _ e)         = vars e
+  vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
+  vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
+
+type Locals = Map Var (Expr, Set Var)
+
+class HasStateDeps a where
+  stateDeps :: Locals -> a -> S.Set Var
+
+-- | Lookup the dependencies of a variable.  If a variable does not appear on
+-- the dependency map, it is supposed to be part of the program state instead of
+-- a local definition.  In this case, the variable depends only on itself.
+instance HasStateDeps Var where
+  stateDeps locals v
+    | Just (_, deps) <- M.lookup v locals = deps
+    | otherwise = S.singleton v
+
+instance HasStateDeps Expr where
+  stateDeps deps e =
+    S.unions [stateDeps deps v | v <- S.toList $ vars e]
+
+instance HasStateDeps a => HasStateDeps [a] where
+  stateDeps deps xs = S.unions $ map (stateDeps deps) xs
+
+instance HasStateDeps Int where
+  stateDeps _ _ = S.empty
+
+instance HasStateDeps a => HasStateDeps (P a) where
+  stateDeps deps e = S.unions $ fmap (stateDeps deps) e
+
+insertLocals :: Var -> Expr -> Locals -> Locals
+insertLocals v e locals =
+  if M.member v locals then
+    error $ "Variable " ++ show v ++ " is already defined in local map"
+  else let vDeps = S.unions [stateDeps locals v' | v' <- S.toList $ vars e] in
+         M.insert v (e, vDeps) locals
 
 counts :: Expr -> M.Map Var Int
 counts (Var v)            = M.singleton v 1

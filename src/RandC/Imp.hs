@@ -4,6 +4,7 @@
 module RandC.Imp where
 
 import RandC.Var
+
 import RandC.Formatting
 import RandC.Prism.Expr hiding (If)
 import RandC.G hiding (If)
@@ -16,7 +17,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
-                       , pDefs :: M.Map Var Expr
+                       , pDefs :: Locals
                        , pRewards :: M.Map Text Expr
                        , pCom :: Com }
   deriving (Show, Eq)
@@ -62,10 +63,31 @@ instance Pretty Program where
   pretty Program{..} =
     vcat [ declarations pVarDecls
          , vcat [ sep [ "def", pretty v, "=", pretty e, ";" ]
-                | (v, e) <- M.assocs pDefs ]
+                | (v, (e, _)) <- M.assocs pDefs ]
          , vcat [ sep [ "reward", pretty v, "=", pretty e, ";" ]
                 | (v, e) <- M.assocs pRewards ]
          , pretty pCom ]
 
 switch :: [(Expr, Com)] -> Com
 switch = foldr (\(e, branch) acc -> Com [If e branch acc]) skip
+
+class ModVars a where
+  modVars :: a -> Set Var
+
+instance ModVars Com where
+  modVars (Com is) = S.unions [modVars i | i <- is]
+
+instance ModVars Instr where
+  modVars (Assn assn)        = M.keysSet assn
+  modVars (If _ cThen cElse) = modVars cThen `S.union` modVars cElse
+  modVars (Block vs c)       = modVars c S.\\ vs
+
+instance HasStateDeps Com where
+  stateDeps deps (Com is) = stateDeps deps is
+
+instance HasStateDeps Instr where
+  stateDeps deps (Assn assn) =
+    S.unions $ fmap (stateDeps deps) assn
+  stateDeps deps (If e cThen cElse) =
+    S.unions [stateDeps deps e, stateDeps deps cThen, stateDeps deps cElse]
+  stateDeps deps (Block _ c) = stateDeps deps c
