@@ -317,4 +317,6 @@ optimize =
   maybeOptimize O.merge    (return . merge)    >=>
   maybeOptimize O.simplify (return . simplify) >=>
   maybeOptimize O.inlining inline              >=>
-  maybeOptimize O.trimming (return . trim)
+  maybeOptimize O.trimming (return . trim)     >=>
+  maybeOptimize O.merge    (return . merge)    >=>
+  maybeOptimize O.simplify (return . simplify)
