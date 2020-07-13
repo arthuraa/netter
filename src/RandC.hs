@@ -43,7 +43,7 @@ module RandC (
 
     Expr
   , Prog
-  -- * Variables, formulas and rewards
+  -- * Variables and rewards
   , namedVar
   , var
   , rewards
