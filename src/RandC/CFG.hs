@@ -19,7 +19,7 @@ data Block = Block { bAssn :: M.Map Var (G (P Expr))
   deriving (Eq, Show)
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
-                       , pDefs     :: M.Map Var Expr
+                       , pDefs     :: Locals
                        , pRewards  :: M.Map Text Expr
                        , pMaxBlock :: Id
                        , pBlocks   :: M.Map Id Block }
@@ -37,7 +37,7 @@ instance Pretty Program where
          , declarations pVarDecls
          , pretty "defs"
          , vcat [ sep [ pretty v, pretty "=", pretty e ]
-                | (v, e) <- M.assocs pDefs ]
+                | (v, (e, _)) <- M.assocs pDefs ]
          , pretty "rewards"
          , vcat [ sep [ pretty v, pretty "=", pretty e ]
                 | (v, e) <- M.assocs pRewards ]

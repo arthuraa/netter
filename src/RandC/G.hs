@@ -52,3 +52,9 @@ toExpr (If e x y) = PE.If e (toExpr x) (toExpr y)
 instance HasVars a => HasVars (G a) where
   vars (Return x)   = vars x
   vars (If e x1 x2) = S.unions [vars e, vars x1, vars x2]
+
+instance HasStateDeps a => HasStateDeps (G a) where
+  stateDeps deps (Return x) =
+    stateDeps deps x
+  stateDeps deps (If e x1 x2) =
+    S.unions [stateDeps deps e, stateDeps deps x1, stateDeps deps x2]

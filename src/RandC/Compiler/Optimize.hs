@@ -4,7 +4,6 @@
 module RandC.Compiler.Optimize where
 
 import RandC.Var
-import RandC.Dependencies
 import RandC.Imp
 import RandC.Prob       hiding (resolve)
 import qualified RandC.G as G
@@ -43,7 +42,7 @@ condAssn e assn1 assn2 =
       varVal assn v = M.findWithDefault (return $ return $ Var v) v assn in
     M.fromSet (\v -> G.If e (varVal assn1 v) (varVal assn2 v)) modVars
 
-mergeInstr :: StateDeps -> Instr -> Instr
+mergeInstr :: Locals -> Instr -> Instr
 mergeInstr _ (Assn assn) =
   Assn assn
 mergeInstr deps (If e c1 c2) =
@@ -61,7 +60,7 @@ mergeInstr deps (If e c1 c2) =
       (_, _) -> If e c1' c2'
 mergeInstr deps (Block vs c) = Block vs (mergeCom deps c)
 
-mergeInstrs :: StateDeps -> [Instr] -> [Instr]
+mergeInstrs :: Locals -> [Instr] -> [Instr]
 mergeInstrs deps is = go is
   where go [] = []
         go (i : is) =
@@ -76,16 +75,17 @@ mergeInstrs deps is = go is
                 else i : i' : is'
             (i, is) -> i : is
 
-mergeCom :: StateDeps -> Com -> Com
+mergeCom :: Locals -> Com -> Com
 mergeCom deps (Com is) = Com $ mergeInstrs deps is
 
 merge :: Program -> Program
 merge (Program decl defs rews blocks) =
-  Program decl defs rews $ mergeCom (definitionStateDeps defs) blocks
+  Program decl defs rews $ mergeCom defs blocks
 
 simplify :: Program -> Program
 simplify (Program decls defs rews com) =
-  Program decls (M.map PE.simplify defs) (M.map PE.simplify rews) (simplifyCom com)
+  let simplifyLocals (e, deps) = (PE.simplify e, deps) in
+  Program decls (M.map simplifyLocals defs) (M.map PE.simplify rews) (simplifyCom com)
 
 simplifyCom :: Com -> Com
 simplifyCom (Com is) = Com $ simplifyInstrs is
@@ -111,7 +111,7 @@ simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
-data IS = IS { _locals   :: Map Var Expr
+data IS = IS { _locals   :: Map Var (Expr, Set Var)
              , _renaming :: Map Var Var }
   deriving (Eq, Ord, Show)
 
@@ -153,7 +153,7 @@ inlineInstr (Assn assn) = do
         -- If so, turn the binding into a formula
         lhs' <- fresh $ name lhs
         let rhs' = subst (Var . rename ren) (toExpr rhs)
-        locals  .at lhs' ?= rhs'
+        locals %= insertLocals lhs' rhs'
         renaming.at lhs  ?= lhs'
         return Nothing
       Nothing -> do
@@ -187,7 +187,7 @@ inlineInstr (Block vs c) = do
   else return [Block vs c']
 
 class NeedsVar a where
-  needsVar :: StateDeps -> Set Var -> a -> Set Var
+  needsVar :: Locals -> Set Var -> a -> Set Var
 
 instance NeedsVar Com where
   needsVar depMap vs (Com is) =
@@ -217,11 +217,10 @@ instance FilterVars Instr where
 
 trim :: Program -> Program
 trim Program{..} =
-  let depMap     = definitionStateDeps pDefs
-      keep0      = S.unions $ fmap (stateDeps depMap) pRewards
-      keep1      = needsVar depMap keep0 pCom
+  let keep0      = S.unions $ fmap (stateDeps pDefs) pRewards
+      keep1      = needsVar pDefs keep0 pCom
       pVarDecls' = M.filterWithKey (\v _ -> v `S.member` keep1) pVarDecls
-      pDefs'     = M.filter (\e -> stateDeps depMap e `S.isSubsetOf` keep1) pDefs
+      pDefs'     = M.filter (\(_, deps) -> deps `S.isSubsetOf` keep1) pDefs
       pCom'      = filterVars keep1 pCom in
     Program pVarDecls' pDefs' pRewards pCom'
 

@@ -4,7 +4,7 @@
 module RandC.Imp where
 
 import RandC.Var
-import RandC.Dependencies
+
 import RandC.Formatting
 import RandC.Prism.Expr hiding (If)
 import RandC.G hiding (If)
@@ -17,7 +17,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 
 data Program = Program { pVarDecls :: M.Map Var (Int, Int)
-                       , pDefs :: M.Map Var Expr
+                       , pDefs :: Locals
                        , pRewards :: M.Map Text Expr
                        , pCom :: Com }
   deriving (Show, Eq)
@@ -63,7 +63,7 @@ instance Pretty Program where
   pretty Program{..} =
     vcat [ declarations pVarDecls
          , vcat [ sep [ "def", pretty v, "=", pretty e, ";" ]
-                | (v, e) <- M.assocs pDefs ]
+                | (v, (e, _)) <- M.assocs pDefs ]
          , vcat [ sep [ "reward", pretty v, "=", pretty e, ";" ]
                 | (v, e) <- M.assocs pRewards ]
          , pretty pCom ]
