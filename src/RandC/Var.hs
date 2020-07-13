@@ -16,10 +16,12 @@ module RandC.Var
    fresh,
    (|+|),
    Renaming,
-   rename,
+   mkrenaming,
    HasVars,
    vars) where
 
+import RandC.FFun (FFun)
+import qualified RandC.FFun as F
 import GHC.Generics
 import Data.HashCons
 import Data.Text
@@ -102,10 +104,10 @@ cs1 |+| cs2 =
       val cs v = M.findWithDefault 0 v cs in
   M.fromSet (\v -> val cs1 v + val cs2 v) vs
 
-type Renaming = M.Map Var Var
+type Renaming = FFun Var Var
 
-rename :: Renaming -> Var -> Var
-rename ren v = M.findWithDefault v v ren
+mkrenaming :: M.Map Var Var -> Renaming
+mkrenaming = F.mkffun id
 
 class HasVars a where
   vars :: a -> S.Set Var

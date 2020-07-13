@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -12,8 +13,9 @@ import RandC.Pass
 import qualified RandC.Prism.Expr as PE
 import RandC.Prism.Expr hiding (If, simplify)
 import qualified RandC.Options as O
+import qualified RandC.FFun as F
 
-import Control.Lens hiding (Const)
+
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Set (Set)
@@ -111,80 +113,94 @@ simplifyInstr (If e cThen cElse) =
   If (PE.simplify e) (simplifyCom cThen) (simplifyCom cElse)
 simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
-data IS = IS { _locals   :: Map Var (Expr, Set Var)
-             , _renaming :: Map Var Var }
-  deriving (Eq, Ord, Show)
+type I a = StateT Locals Pass a
 
-makeLenses ''IS
+substAssn :: Renaming -> Map Var (G (P Expr)) -> Map Var (G (P Expr))
+substAssn sigma assn = (fmap.fmap.fmap) (subst (PE.Var . (sigma F.!))) assn
 
-type I a = StateT IS Pass a
+conflicts :: Locals -> Renaming -> Set Var -> Set Var
+conflicts locals sigma vs = loop (length $ F.supp sigma) sigma vs (F.supp sigma S.\\ vs) vs
+  where loop k sigma acc rem next =
+          if k > 0 then
+            let hasConflict v = not (S.disjoint (stateDeps locals (sigma F.! v)) next)
+                next' = S.filter hasConflict rem in
+              if next' == S.empty then acc
+              else loop (k - 1) sigma (S.union acc next') (rem S.\\ next') next'
+          else acc
+
+intern :: Map Var (G Expr) -> I Renaming
+intern assn =
+  let assn' = fmap toExpr assn
+      intern1 v e = do
+        v' <- fresh (name v)
+        modify $ \locals -> insertLocals v' e locals
+        return v' in
+    mkrenaming <$> M.traverseWithKey intern1 assn'
+
+inlineLoop :: Renaming -> [Instr] -> I (Renaming, [Instr])
+inlineLoop sigma [] = return (sigma, [])
+
+inlineLoop sigma (Assn assn : c) = do
+  ls <- get
+  let assn' = substAssn sigma assn
+  let detAssn = M.mapMaybe (traverse ofP) assn'
+  detAssn' <- intern detAssn
+  let cs = conflicts ls sigma (M.keysSet assn')
+  let sigma_def v
+        | S.member v cs = v
+        | S.member v (F.supp detAssn') = detAssn' F.! v
+        | otherwise = sigma F.! v
+  let sigma' = mkrenaming
+               $ M.fromList [(v, sigma_def v)
+                            | v <- S.toList (S.union (F.supp detAssn') (F.supp sigma))]
+  (sigma'', c') <- inlineLoop sigma' c
+  return (sigma'', Assn assn' : c')
+
+inlineLoop sigma (If e cthen celse : c) = do
+  locals <- get
+  let e' = subst (PE.Var . (sigma F.!)) e
+  (sigma_then, cthen') <- inlineLoop sigma (instrs cthen)
+  (sigma_else, celse') <- inlineLoop sigma (instrs celse)
+  let modified = S.union (modVars (Com cthen')) (modVars (Com celse'))
+  let canMerge = S.disjoint (stateDeps locals e') modified
+  let sigma_def v
+        | canMerge = PE.If e' (PE.Var (sigma_then F.! v)) (PE.Var (sigma_else F.! v))
+        | sigma_then F.! v == sigma_else F.! v = PE.Var $ sigma_then F.! v
+        | otherwise = PE.Var v
+  let sigma' = M.fromList [(v, sigma_def v)
+                         | v <- S.toList $ S.union (F.supp sigma_then) (F.supp sigma_else) ]
+  sigma'' <- intern $ fmap return sigma'
+  (sigma''', c') <- inlineLoop sigma'' c
+  return (sigma''', If e' (Com cthen') (Com celse') : c')
+
+inlineLoop sigma (Block vs block : c) = do
+  locals <- get
+  let cs = conflicts locals sigma vs
+  let sigma_def' v
+        | S.member v cs = v
+        | otherwise = sigma F.! v
+  let sigma' = mkrenaming $ M.fromList [(v, sigma_def' v) | v <- S.toList $ F.supp sigma]
+  (sigma'', block') <- inlineLoop sigma' (instrs block)
+  let cs' = conflicts locals sigma'' vs
+  let sigma_def''' v
+        | S.member v cs' = v
+        | otherwise = sigma'' F.! v
+  let sigma''' = mkrenaming $ M.fromList [(v, sigma_def''' v) | v <- S.toList $ F.supp sigma'']
+  (sigma'''', c') <- inlineLoop sigma''' c
+  return (sigma'''', Block vs (Com block') : c')
 
 inline :: Program -> Pass Program
 inline Program{..} =
   if M.null pDefs then do
-    (pCom', IS pDefs' ren) <- runStateT (inlineCom pCom) (IS M.empty M.empty)
-    let pRewards' = fmap (subst (Var . rename ren)) pRewards
-    return Program{pDefs = pDefs', pRewards = pRewards', pCom = pCom', ..}
+    ((sigma, pCom'), pDefs') <- runStateT (inlineLoop (mkrenaming M.empty) (instrs pCom)) M.empty
+    let pRewards' = fmap (subst (Var . (sigma F.!))) pRewards
+    return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
   else error "Inlining does not work with local definitions"
-
-inlineCom :: Com -> I Com
-inlineCom (Com is) = Com <$> inlineInstrs is
-
-inlineInstrs :: [Instr] -> I [Instr]
-inlineInstrs [] = return []
-inlineInstrs (i : is) = do
-  is1 <- inlineInstr  i
-  is2 <- inlineInstrs is
-  return $ is1 ++ is2
 
 substG :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
 substG f x = go x
   where go (G.Return x) = G.Return <$> traverse (substM f) x
         go (G.If e x y) = G.If <$> substM f e <*> go x <*> go y
-
-inlineInstr :: Instr -> I [Instr]
-inlineInstr (Assn assn) = do
-  ren   <- use renaming
-  renaming .= M.empty
-  assn' <- flip M.traverseMaybeWithKey assn $ \lhs rhs -> do
-    -- Check if the right-hand side is deterministic
-    case traversed ofP rhs of
-      Just rhs -> do
-        -- If so, turn the binding into a formula
-        lhs' <- fresh $ name lhs
-        let rhs' = subst (Var . rename ren) (toExpr rhs)
-        locals %= insertLocals lhs' rhs'
-        renaming.at lhs  ?= lhs'
-        return Nothing
-      Nothing -> do
-        -- Otherwise, just rename the formula
-        Just <$> substG (return . Var . rename ren) rhs
-
-  ren' <- use renaming
-  renaming .= (ren' `M.union` ren) `M.withoutKeys` (M.keysSet assn')
-  if M.null assn' then return [] else return [Assn assn']
-
-inlineInstr (If e cThen cElse) = do
-  ren0     <- use renaming
-  cThen'   <- inlineCom cThen
-  renThen  <- use renaming
-  renaming .= ren0
-  cElse'   <- inlineCom cElse
-  renElse  <- use renaming
-  renaming .= ren0
-  if cThen' == skip && cElse' == skip then do
-    let merge v = PE.If e (Var $ rename renThen v) (Var $ rename renElse v)
-    let renamed = M.keysSet renThen `S.union` M.keysSet renElse
-    inlineInstr $ Assn $ M.fromSet (return . return . merge) renamed
-  else do
-    let flushVars c ren = cat c $ Com [Assn $ M.map (return . return . Var) ren]
-    let e' = subst (Var . rename ren0) e
-    return [If e' (flushVars cThen' renThen) (flushVars cElse' renElse)]
-
-inlineInstr (Block vs c) = do
-  c' <- inlineCom c
-  if S.null vs then return $ instrs c'
-  else return [Block vs c']
 
 class NeedsVar a where
   needsVar :: Locals -> Set Var -> a -> Set Var
