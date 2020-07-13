@@ -847,6 +847,130 @@ Definition dead_store_elim defs c vs :=
   let live := live_vars defs c vs in
   dead_store_elim_loop defs c live.
 
+Lemma dead_store_elimP defs c vs :
+  let live := live_vars defs c vs in
+  let c'   := dead_store_elim defs c vs in
+  match_prob live live (run defs c) (run defs c').
+Proof.
+move=> live c'; rewrite {1}/live live_varsP.
+apply: match_probWL (fsubsetUr _ _) _.
+exact: dead_store_elim_loopP.
+Qed.
+
+Inductive mcom T :=
+| MSkip
+| MAssn of assignment & mcom T & T
+| MIf of bexpr & mcom T & T & mcom T & T & mcom T & T
+| MBlock of {fset var} & mcom T & T & mcom T & T.
+Arguments MSkip {T}.
+
+Fixpoint mcom_proj T (mc : mcom T) :=
+  match mc with
+  | MSkip => CSkip
+  | MAssn assn mc _ => CAssn assn (mcom_proj mc)
+  | MIf e mcthen _ mcelse _ mc _ => CIf e (mcom_proj mcthen) (mcom_proj mcelse) (mcom_proj mc)
+  | MBlock locals mblock _ mc _ => CBlock locals (mcom_proj mblock) (mcom_proj mc)
+  end.
+
+Fixpoint dead_store_elim_opt_init defs c : mcom dependencies * dependencies * {fset var} :=
+  match c with
+  | CSkip => (MSkip, emptyf, fset0)
+  | CAssn assn c =>
+    let: (mc, deps_c, mod_c) := dead_store_elim_opt_init defs c in
+    (MAssn assn mc deps_c,
+     deps_comp (assn_deps defs assn) deps_c,
+     domm assn :|: mod_c)
+  | CIf e cthen celse c =>
+    let: (mcthen, deps_then, mod_then) := dead_store_elim_opt_init defs cthen in
+    let: (mcelse, deps_else, mod_else) := dead_store_elim_opt_init defs celse in
+    let: (mc, deps_c, mod_c) := dead_store_elim_opt_init defs c in
+    let deps_b := if_deps defs e deps_then deps_else (mod_then :|: mod_else) in
+    (MIf e mcthen deps_then mcelse deps_else mc deps_c,
+     deps_comp deps_b deps_c,
+     mod_then :|: mod_else :|: mod_c)
+  | CBlock locals block c =>
+    let: (mblock, deps_block, mod_block) := dead_store_elim_opt_init defs block in
+    let: (mc, deps_c, mod_c) := dead_store_elim_opt_init defs c in
+    (MBlock locals mblock deps_block mc deps_c,
+     deps_comp (block_deps defs locals deps_block) deps_c,
+     mod_block :\: locals :|: mod_c)
+  end.
+
+Fixpoint dead_store_elim_opt_init_spec defs c : mcom dependencies :=
+  match c with
+  | CSkip =>
+    MSkip
+  | CAssn assn c =>
+    MAssn assn (dead_store_elim_opt_init_spec defs c) (com_deps defs c)
+  | CIf e cthen celse c =>
+    MIf e
+        (dead_store_elim_opt_init_spec defs cthen) (com_deps defs cthen)
+        (dead_store_elim_opt_init_spec defs celse) (com_deps defs celse)
+        (dead_store_elim_opt_init_spec defs c)     (com_deps defs c)
+  | CBlock locals block c =>
+    MBlock locals
+           (dead_store_elim_opt_init_spec defs block) (com_deps defs block)
+           (dead_store_elim_opt_init_spec defs c) (com_deps defs c)
+  end.
+
+Lemma dead_store_elim_opt_initE defs c :
+  dead_store_elim_opt_init defs c =
+  (dead_store_elim_opt_init_spec defs c,
+   com_deps defs c, com_mod_vars c).
+Proof.
+elim: c=> //= *;
+by repeat match goal with
+| [H : ?x = (_, _, _) |- context[?x]] => rewrite {}H /=
+end.
+Qed.
+
+Fixpoint dead_store_elim_opt_loop mc live : com :=
+  match mc with
+  | MSkip => CSkip
+  | MAssn assn mc deps_c =>
+    let live' := lift_deps deps_c live in
+    let assn' := filterm (fun v _ => v \in live') assn in
+    let c'    := dead_store_elim_opt_loop mc live in
+    CAssn assn' c'
+  | MIf e mcthen deps_then mcelse deps_else mc deps_c =>
+    let live' := lift_deps deps_c live in
+    let cthen' := dead_store_elim_opt_loop mcthen live' in
+    let celse' := dead_store_elim_opt_loop mcelse live' in
+    let c' := dead_store_elim_opt_loop mc live in
+    CIf e cthen' celse' c'
+  | MBlock locals mblock deps_block mc deps_c =>
+    let live' := lift_deps deps_c live in
+    let live'' := live' :\: locals in
+    let block' := dead_store_elim_opt_loop mblock live'' in
+    let c' := dead_store_elim_opt_loop mc live in
+    CBlock locals block' c'
+  end.
+
+Lemma dead_store_elim_opt_loopE defs c live :
+  dead_store_elim_opt_loop (dead_store_elim_opt_init_spec defs c) live =
+  dead_store_elim_loop defs c live.
+Proof.
+elim: c live=> //= *;
+by repeat match goal with
+| [H : forall live, ?f live = _
+   |- context[?f ?live]] => rewrite {}H /=
+end.
+Qed.
+
+Definition dead_store_elim_opt defs c vs0 :=
+  let: (mc, deps_c, _) := dead_store_elim_opt_init defs c in
+  let  vs := vs0 :|: lift_deps deps_c (supp deps_c) in
+  let  live := live_vars_loop (size vs) deps_c vs0 in
+  dead_store_elim_opt_loop mc live.
+
+Lemma dead_store_elim_optE defs c vs0 :
+  dead_store_elim_opt defs c vs0 =
+  dead_store_elim     defs c vs0.
+Proof.
+rewrite /dead_store_elim_opt /dead_store_elim.
+by rewrite dead_store_elim_opt_initE dead_store_elim_opt_loopE.
+Qed.
+
 Module Inlining.
 
 Module Type CONFLICTS.
