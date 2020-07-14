@@ -1084,8 +1084,10 @@ Fixpoint inline_loop σ c : subst * com :=
     let assn := subst_assn σ assn in
     let det_assn := filter_map (fun=> of_dirac) assn in
     let cs := conflicts σ (domm assn) in
-    let σ_def v := if v \in cs then ZSym v
-                   else if det_assn v is Some e then e
+    let σ_def v := if det_assn v is Some e then
+                     if fdisjoint (zexpr_vars [::] e) (domm assn) then e
+                     else ZSym v
+                   else if v \in cs then ZSym v
                    else σ v in
     let σ := mkffun σ_def (domm det_assn :|: supp σ) in
     let: (σ, c) := inline_loop σ c in
@@ -1158,7 +1160,7 @@ move=> IH σ σ'' c'' st /=.
 set assn' := subst_assn σ assn.
 set det_assn := filter_map _ _.
 set cs := conflicts σ _.
-set σ'_def := fun v => if v \in cs then ZSym v else _.
+set σ'_def := fun v => if det_assn v is Some _ then _ else _.
 set σ' := mkffun _ _.
 case ec: inline_loop => [{}σ'' {}c''] wf [<- <-] /=.
 rewrite run_Assn /=.
@@ -1174,23 +1176,33 @@ suff wf' st' : st' \in supp p_st' -> wf_subst [::] σ' st'.
   move=> st'' /supp_sampleP [st' {}/wf' wf'].
   case: (IH _ _ _ _ wf' ec)=> _; exact.
 move=> st'P.
-have st_cs v: v \notin cs -> st' v = st v.
-  move=> v_cs; have: v \notin domm assn'.
-    apply: contra v_cs; apply/fsubsetP/conflicts_sub.
+have st_assn v: v \notin domm assn' -> st' v = st v.
   rewrite domm_map=> vP.
   case/supp_sampleP: st'P=> /= exps /supp_mapm_pP [ed _] /supp_diracP ->.
   rewrite updmE mapmE; move: vP; rewrite ed mem_domm.
   by case: (exps v).
-move=> v; rewrite /σ' mkffunE; case: ifP=> // v_domm.
-rewrite /σ'_def; case: ifPn=> // v_cs.
-have /dommPn det_v: v \notin domm det_assn.
+move=> v; rewrite /σ' mkffunE /σ'_def in_fsetU mem_domm.
+case det_v: (det_assn v) => [e|] //=.
+  case: ifP=> // dis.
+  have -> : st' v = feval_zexpr [::] st e.
+    move/do_assnP: st'P=> /(_ v).
+    move: det_v; rewrite filter_mapE mapmE.
+    case assn_v: (assn v)=> [p|] //=.
+    set p' := sample p _ => p'_e [e' e'_p ->].
+    move: (of_diracK p'); rewrite p'_e /=.
+    move=> /esym /eq_sample_dirac/(_ _ e'_p)/dirac_inj <-.
+    by rewrite wf_subst_feval_zexpr.
+  apply: eq_in_feval_zexpr=> v' /(fdisjointP dis)/dommPn.
+  move: (do_assnP v' st'P); rewrite mapmE.
+  by case assn_v': (assn v')=> [p|] //.
+case: ifPn=> // v_σ; case: ifPn=> //= v_cs.
+rewrite st_assn; last first.
   apply: contra v_cs; apply/fsubsetP.
-  apply: fsubset_trans (conflicts_sub _ _).
-  by rewrite domm_filter_map fset_filter_subset.
-rewrite in_fsetU mem_domm det_v /= in v_domm *.
-have dis : fdisjoint (zexpr_vars [::] (σ v)) cs by exact: conflicts_dis.
-rewrite st_cs // -wf; apply: eq_in_feval_zexpr => v' in_σ_v.
-apply: st_cs; exact: (fdisjointP dis).
+  exact: conflicts_sub.
+rewrite -wf; apply: eq_in_feval_zexpr=> v' v'_e.
+apply: st_assn; suff : v' \notin cs.
+  apply: contra; apply/fsubsetP; exact: conflicts_sub.
+apply/fdisjointP: v'_e; exact: conflicts_dis.
 Qed.
 
 Lemma inline_loop_if e cthen celse c :

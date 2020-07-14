@@ -288,7 +288,7 @@ insertLocals :: Var -> Expr -> Locals -> Locals
 insertLocals v e locals =
   if M.member v locals then
     error $ "Variable " ++ show v ++ " is already defined in local map"
-  else let vDeps = S.unions [stateDeps locals v' | v' <- S.toList $ vars e] in
+  else let vDeps = stateDeps locals e in
          M.insert v (e, vDeps) locals
 
 counts :: Expr -> M.Map Var Int

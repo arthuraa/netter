@@ -6,6 +6,9 @@ import qualified Data.Map as M
 
 data FFun k a = FFun (k -> a) (Map k a)
 
+instance (Show k, Show a) => Show (FFun k a) where
+  show (FFun _ m) = show m
+
 insert :: Ord k => k -> a -> FFun k a -> FFun k a
 insert k x (FFun def m) = FFun def (M.insert k x m)
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -155,10 +157,14 @@ inlineLoop sigma (Assn assn : c) = do
   let detAssn = M.mapMaybe (traverse ofP) assn'
   detAssn' <- intern detAssn
   cs <- conflicts sigma (M.keysSet assn')
+  locals <- get
   let sigma_def v
+        | v' /= v =
+            if S.disjoint (stateDeps locals v') (M.keysSet assn') then v'
+            else v
         | S.member v cs = v
-        | S.member v (F.supp detAssn') = detAssn' F.! v
         | otherwise = sigma F.! v
+        where v' = detAssn' F.! v
   let sigma' = mkrenaming
                $ M.fromList [(v, sigma_def v)
                             | v <- S.toList (S.union (F.supp detAssn') (F.supp sigma))]
