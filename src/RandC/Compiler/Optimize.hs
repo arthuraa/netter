@@ -328,7 +328,6 @@ maybeOptimize opt f prog = do
 
 optimize :: Program -> Pass Program
 optimize =
-  maybeOptimize O.merge    (return . merge)    >=>
   maybeOptimize O.simplify (return . simplify) >=>
   maybeOptimize O.inlining inline              >=>
   maybeOptimize O.trimming (return . trim)     >=>
