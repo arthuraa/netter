@@ -16,7 +16,7 @@ import qualified RandC.Options as O
 import RandC.FFun (FFun)
 import qualified RandC.FFun as F
 
-
+import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Set (Set)
@@ -115,8 +115,16 @@ simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
 type I a = StateT Locals Pass a
 
+substGM :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
+substGM f x = go x
+  where go (G.Return x) = G.Return <$> traverse (substM f) x
+        go (G.If e x y) = G.If <$> substM f e <*> go x <*> go y
+
+substG :: (Var -> Expr) -> G (P Expr) -> G (P Expr)
+substG f = runIdentity . substGM (Identity . f)
+
 substAssn :: Renaming -> Map Var (G (P Expr)) -> Map Var (G (P Expr))
-substAssn sigma assn = (fmap.fmap.fmap) (subst (PE.Var . (sigma F.!))) assn
+substAssn sigma assn = fmap (substG (PE.Var . (sigma F.!))) assn
 
 conflicts :: Locals -> Renaming -> Set Var -> Set Var
 conflicts locals sigma vs = loop (length $ F.supp sigma) sigma vs (F.supp sigma S.\\ vs) vs
@@ -300,11 +308,6 @@ trim Program{..} =
       pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` live) pDefs
       pVarDecls' = M.filterWithKey (\v _ -> v `S.member` live) pVarDecls in
     Program{pVarDecls = pVarDecls', pCom = pCom', pDefs = pDefs', ..}
-
-substG :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
-substG f x = go x
-  where go (G.Return x) = G.Return <$> traverse (substM f) x
-        go (G.If e x y) = G.If <$> substM f e <*> go x <*> go y
 
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program
