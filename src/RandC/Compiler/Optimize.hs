@@ -143,6 +143,7 @@ conflicts sigma vs = do
 intern :: Map Var (G Expr) -> I Renaming
 intern assn =
   let assn' = fmap toExpr assn
+      intern1 _ (PE.Var v') = return v'
       intern1 v e = do
         v' <- fresh (name v)
         modify $ \locals -> insertLocals v' e locals
