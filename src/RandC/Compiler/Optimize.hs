@@ -301,12 +301,23 @@ deadStoreElimOpt defs c vs0 =
       live = liveVarsLoop (S.size vs) deps_c vs0 in
     (Com $ deadStoreElimOptLoop mc live, live)
 
+comUsedVars :: Locals -> Com -> Set Var
+comUsedVars locals = doCom
+  where doCom c = S.unions [doInstr i | i <- instrs c]
+        doInstr (Assn assn) =
+          S.union (M.keysSet assn)
+          (S.unions [stateDeps locals gpe | gpe <- M.elems assn])
+        doInstr (If e cthen celse) =
+          S.unions [stateDeps locals e, doCom cthen, doCom celse]
+        doInstr (Block vs block) = S.union vs (doCom block)
+
 trim :: Program -> Program
 trim Program{..} =
   let keep0 = S.unions $ fmap (stateDeps pDefs) pRewards
-      (pCom', live) = deadStoreElimOpt pDefs pCom keep0
-      pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` live) pDefs
-      pVarDecls' = M.filterWithKey (\v _ -> v `S.member` live) pVarDecls in
+      (pCom', _) = deadStoreElimOpt pDefs pCom keep0
+      usedVars = comUsedVars pDefs pCom'
+      pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` usedVars) pDefs
+      pVarDecls' = M.filterWithKey (\v _ -> v `S.member` usedVars) pVarDecls in
     Program{pVarDecls = pVarDecls', pCom = pCom', pDefs = pDefs', ..}
 
 maybeOptimize ::
