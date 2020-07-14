@@ -126,15 +126,17 @@ substG f = runIdentity . substGM (Identity . f)
 substAssn :: Renaming -> Map Var (G (P Expr)) -> Map Var (G (P Expr))
 substAssn sigma assn = fmap (substG (PE.Var . (sigma F.!))) assn
 
-conflicts :: Locals -> Renaming -> Set Var -> Set Var
-conflicts locals sigma vs = loop (length $ F.supp sigma) sigma vs (F.supp sigma S.\\ vs) vs
-  where loop k sigma acc rem next =
+conflicts :: Renaming -> Set Var -> I (Set Var)
+conflicts sigma vs = do
+  locals <- get
+  loop locals (S.size $ F.supp sigma) sigma vs (F.supp sigma S.\\ vs) vs
+  where loop locals k sigma acc rem next =
           if k > 0 then
             let hasConflict v = not (S.disjoint (stateDeps locals (sigma F.! v)) next)
                 next' = S.filter hasConflict rem in
-              if next' == S.empty then acc
-              else loop (k - 1) sigma (S.union acc next') (rem S.\\ next') next'
-          else acc
+              if next' == S.empty then return acc
+              else loop locals (k - 1) sigma (S.union acc next') (rem S.\\ next') next'
+          else return acc
 
 intern :: Map Var (G Expr) -> I Renaming
 intern assn =
@@ -149,11 +151,10 @@ inlineLoop :: Renaming -> [Instr] -> I (Renaming, [Instr])
 inlineLoop sigma [] = return (sigma, [])
 
 inlineLoop sigma (Assn assn : c) = do
-  ls <- get
   let assn' = substAssn sigma assn
   let detAssn = M.mapMaybe (traverse ofP) assn'
   detAssn' <- intern detAssn
-  let cs = conflicts ls sigma (M.keysSet assn')
+  cs <- conflicts sigma (M.keysSet assn')
   let sigma_def v
         | S.member v cs = v
         | S.member v (F.supp detAssn') = detAssn' F.! v
@@ -182,14 +183,13 @@ inlineLoop sigma (If e cthen celse : c) = do
   return (sigma''', If e' (Com cthen') (Com celse') : c')
 
 inlineLoop sigma (Block vs block : c) = do
-  locals <- get
-  let cs = conflicts locals sigma vs
+  cs <- conflicts sigma vs
   let sigma_def' v
         | S.member v cs = v
         | otherwise = sigma F.! v
   let sigma' = mkrenaming $ M.fromList [(v, sigma_def' v) | v <- S.toList $ F.supp sigma]
   (sigma'', block') <- inlineLoop sigma' (instrs block)
-  let cs' = conflicts locals sigma'' vs
+  cs' <- conflicts sigma'' vs
   let sigma_def''' v
         | S.member v cs' = v
         | otherwise = sigma'' F.! v
