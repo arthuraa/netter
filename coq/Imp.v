@@ -1098,8 +1098,8 @@ Fixpoint inline_loop σ c : subst * com :=
     let: (σ_else, celse') := inline_loop σ celse in
     let modified := com_mod_vars cthen' :|: com_mod_vars celse' in
     let can_merge := fdisjoint (bexpr_vars [::] e') modified in
-    let σ_def v := if can_merge then ZTest e' (σ_then v) (σ_else v)
-                   else if σ_then v == σ_else v then σ_then v
+    let σ_def v := if σ_then v == σ_else v then σ_then v
+                   else if can_merge then ZTest e' (σ_then v) (σ_else v)
                    else ZSym v in
     let σ := mkffun σ_def (supp σ_then :|: supp σ_else) in
     let: (σ, c) := inline_loop σ c in
@@ -1219,7 +1219,7 @@ set cond := feval_bexpr [::] st e.
 set cb := if cond then cthen else celse.
 set cb' := if cond then cthen' else celse'.
 set can_merge := fdisjoint _ _.
-set σ'_def := fun v => if can_merge then _ else _.
+set σ'_def := fun v => if σ_then v == _ then _ else _.
 set σ' := mkffun σ'_def (supp σ_then :|: supp σ_else).
 set σ_b := if cond then σ_then else σ_else.
 have {IHthen IHelse} IHb : inline_loop_spec cb.
@@ -1239,7 +1239,9 @@ move=> st'_supp v; move/(_ _ st'_supp v) in wf'.
 rewrite -wf' /σ' mkffunE; case: ifPn=> [_|]; last first.
   rewrite in_fsetU negb_or; case/andP=> /suppPn v_then /suppPn v_else.
   by rewrite /σ_b; case: (cond); rewrite ?v_then ?v_else.
-rewrite /σ'_def /σ_b /=; case: (boolP can_merge)=> [dis|_].
+rewrite /σ'_def /σ_b /=.
+case: eqP=> [?|_]; first by case: (cond)=> //; congruence.
+case: (boolP can_merge)=> [dis|_].
   have {}dis: fdisjoint (bexpr_vars [::] e') (com_mod_vars cb').
     move: dis; rewrite /can_merge fdisjointUr; case/andP.
     by rewrite /cb'; case: (cond).
@@ -1250,7 +1252,6 @@ rewrite /σ'_def /σ_b /=; case: (boolP can_merge)=> [dis|_].
     apply/eq_in_feval_bexpr=> v' /(fdisjointP dis).
     move: st'_supp; rewrite -ecb; exact: com_mod_varsP.
   by rewrite wf_subst_feval_bexpr // /cond; case: feval_bexpr.
-case: eqP=> [?|_]; first by case: (cond)=> //; congruence.
 by rewrite wf'.
 Qed.
 

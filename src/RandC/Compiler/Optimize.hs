@@ -180,8 +180,8 @@ inlineLoop sigma (If e cthen celse : c) = do
   let modified = S.union (modVars (Com cthen')) (modVars (Com celse'))
   let canMerge = S.disjoint (stateDeps locals e') modified
   let sigma_def v
-        | canMerge = PE.If e' (PE.Var (sigma_then F.! v)) (PE.Var (sigma_else F.! v))
         | sigma_then F.! v == sigma_else F.! v = PE.Var $ sigma_then F.! v
+        | canMerge = PE.If e' (PE.Var (sigma_then F.! v)) (PE.Var (sigma_else F.! v))
         | otherwise = PE.Var v
   let sigma' = M.fromList [(v, sigma_def v)
                          | v <- S.toList $ S.union (F.supp sigma_then) (F.supp sigma_else) ]
