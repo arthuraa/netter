@@ -34,7 +34,12 @@ compile prog = do
 
   pc <- fresh "pc"
 
-  let decls'  = M.insert pc (0, maxId - 1) decls
+  -- The program could end up with an empty control-flow graph.  Unfortunately,
+  -- Prism does not allow variables with a range of size 1, so we add an extra
+  -- PC value in such cases.
+  let pcUpperBound = max 1 (maxId - 1)
+
+  let decls'  = M.insert pc (0, pcUpperBound) decls
 
   let pcAssns = M.fromList [ (n, return $ return $ PE.simplify $ compileNextPc nextPc)
                            | (n, Src.Block _ nextPc) <- M.assocs blocks ]
