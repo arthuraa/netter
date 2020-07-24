@@ -155,7 +155,8 @@ Fixpoint subst_bexpr f be : bexpr :=
   | BEqB be1 be2 => BEqB (subst_bexpr f be1) (subst_bexpr f be2)
   | BEqZ ze1 ze2 => BEqZ (subst_zexpr f ze1) (subst_zexpr f ze2)
   | BEqQ qe1 qe2 => BEqQ (subst_qexpr f qe1) (subst_qexpr f qe2)
-  | BTest be be1 be2 => BTest (subst_bexpr f be) (subst_bexpr f be1) (subst_bexpr f be2)
+  | BTest be be1 be2 =>
+    BTest (subst_bexpr f be) (subst_bexpr f be1) (subst_bexpr f be2)
   | BCompZ o ze1 ze2 => BCompZ o (subst_zexpr f ze1) (subst_zexpr f ze2)
   | BCompQ o qe1 qe2 => BCompQ o (subst_qexpr f qe1) (subst_qexpr f qe2)
   | BLogOp o be1 be2 => BLogOp o (subst_bexpr f be1) (subst_bexpr f be2)
@@ -166,15 +167,19 @@ with subst_zexpr f ze : zexpr :=
   match ze with
   | ZSym v => f v
   | ZConst _ => ze
-  | ZTest be ze1 ze2 => ZTest (subst_bexpr f be) (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | ZArith o ze1 ze2 => ZArith o (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | ZTrunc o qe => ZTrunc o (subst_qexpr f qe)
+  | ZTest be ze1 ze2 =>
+    ZTest (subst_bexpr f be) (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | ZArith o ze1 ze2 =>
+    ZArith o (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | ZTrunc o qe =>
+    ZTrunc o (subst_qexpr f qe)
   end
 
 with subst_qexpr f qe : qexpr :=
   match qe with
   | QConst _ => qe
-  | QTest be qe1 qe2 => QTest (subst_bexpr f be) (subst_qexpr f qe1) (subst_qexpr f qe2)
+  | QTest be qe1 qe2 =>
+    QTest (subst_bexpr f be) (subst_qexpr f qe1) (subst_qexpr f qe2)
   | QArith o qe1 qe2 => QArith o (subst_qexpr f qe1) (subst_qexpr f qe2)
   | QOfZ ze => QOfZ (subst_zexpr f ze)
   end.
