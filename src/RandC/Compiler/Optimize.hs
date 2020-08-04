@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -87,9 +86,10 @@ merge (Program decl defs rews blocks) =
   Program decl defs rews $ mergeCom defs blocks
 
 simplify :: Program -> Program
-simplify (Program decls defs rews com) =
-  let simplifyLocals (e, deps) = (PE.simplify e, deps) in
-  Program decls (M.map simplifyLocals defs) (M.map PE.simplify rews) (simplifyCom com)
+simplify (Program decls (defs, _) rews com) =
+  let simplifyLocals (e, deps) = (PE.simplify e, deps)
+      locals' = PE.mklocals $ M.map simplifyLocals defs  in
+  Program decls locals' (M.map PE.simplify rews) (simplifyCom com)
 
 simplifyCom :: Com -> Com
 simplifyCom (Com is) = Com $ simplifyInstrs is
@@ -116,6 +116,9 @@ simplifyInstr (If e cThen cElse) =
 simplifyInstr (Block vs c) = Block vs (simplifyCom c)
 
 type I a = StateT Locals Pass a
+type Subst = FFun Var Expr
+mksubst :: Map Var Expr -> Subst
+mksubst = F.mkffun PE.Var
 
 substGM :: Monad m => (Var -> m Expr) -> G (P Expr) -> m (G (P Expr))
 substGM f x = go x
@@ -125,10 +128,10 @@ substGM f x = go x
 substG :: (Var -> Expr) -> G (P Expr) -> G (P Expr)
 substG f = runIdentity . substGM (Identity . f)
 
-substAssn :: Renaming -> Map Var (G (P Expr)) -> Map Var (G (P Expr))
-substAssn sigma assn = fmap (substG (PE.Var . (sigma F.!))) assn
+substAssn :: Subst -> Map Var (G (P Expr)) -> Map Var (G (P Expr))
+substAssn sigma assn = fmap (substG (sigma F.!)) assn
 
-conflicts :: Renaming -> Set Var -> I (Set Var)
+conflicts :: Subst -> Set Var -> I (Set Var)
 conflicts sigma vs = do
   locals <- get
   loop locals (S.size $ F.supp sigma) sigma vs (F.supp sigma S.\\ vs) vs
@@ -140,17 +143,17 @@ conflicts sigma vs = do
               else loop locals (k - 1) sigma (S.union acc next') (rem S.\\ next') next'
           else return acc
 
-intern :: Map Var (G Expr) -> I Renaming
+intern :: Map Var (G Expr) -> I Subst
 intern assn =
   let assn' = fmap toExpr assn
-      intern1 _ (PE.Var v') = return v'
       intern1 v e = do
-        v' <- fresh (name v)
-        modify $ \locals -> insertLocals v' e locals
-        return v' in
-    mkrenaming <$> M.traverseWithKey intern1 assn'
+        locals <- get
+        (e', locals') <- insertLocals (name v) e locals
+        put locals'
+        return e' in
+    mksubst <$> M.traverseWithKey intern1 assn'
 
-inlineLoop :: Renaming -> [Instr] -> I (Renaming, [Instr])
+inlineLoop :: Subst -> [Instr] -> I (Subst, [Instr])
 inlineLoop sigma [] = return (sigma, [])
 
 inlineLoop sigma (Assn assn : c) = do
@@ -160,13 +163,13 @@ inlineLoop sigma (Assn assn : c) = do
   cs <- conflicts sigma (M.keysSet assn')
   locals <- get
   let sigma_def v
-        | v' /= v =
-            if S.disjoint (stateDeps locals v') (M.keysSet assn') then v'
-            else v
-        | S.member v cs = v
+        | e' /= PE.Var v =
+            if S.disjoint (stateDeps locals e') (M.keysSet assn') then e'
+            else PE.Var v
+        | S.member v cs = PE.Var v
         | otherwise = sigma F.! v
-        where v' = detAssn' F.! v
-  let sigma' = mkrenaming
+        where e' = detAssn' F.! v
+  let sigma' = mksubst
                $ M.fromList [(v, sigma_def v)
                             | v <- S.toList (S.union (F.supp detAssn') (F.supp sigma))]
   (sigma'', c') <- inlineLoop sigma' c
@@ -174,14 +177,14 @@ inlineLoop sigma (Assn assn : c) = do
 
 inlineLoop sigma (If e cthen celse : c) = do
   locals <- get
-  let e' = subst (PE.Var . (sigma F.!)) e
+  let e' = subst (sigma F.!) e
   (sigma_then, cthen') <- inlineLoop sigma (instrs cthen)
   (sigma_else, celse') <- inlineLoop sigma (instrs celse)
   let modified = S.union (modVars (Com cthen')) (modVars (Com celse'))
   let canMerge = S.disjoint (stateDeps locals e') modified
   let sigma_def v
-        | sigma_then F.! v == sigma_else F.! v = PE.Var $ sigma_then F.! v
-        | canMerge = PE.If e' (PE.Var (sigma_then F.! v)) (PE.Var (sigma_else F.! v))
+        | sigma_then F.! v == sigma_else F.! v = sigma_then F.! v
+        | canMerge = PE.If e' (sigma_then F.! v) (sigma_else F.! v)
         | otherwise = PE.Var v
   let sigma' = M.fromList [(v, sigma_def v)
                          | v <- S.toList $ S.union (F.supp sigma_then) (F.supp sigma_else) ]
@@ -192,23 +195,25 @@ inlineLoop sigma (If e cthen celse : c) = do
 inlineLoop sigma (Block vs block : c) = do
   cs <- conflicts sigma vs
   let sigma_def' v
-        | S.member v cs = v
+        | S.member v cs = PE.Var v
         | otherwise = sigma F.! v
-  let sigma' = mkrenaming $ M.fromList [(v, sigma_def' v) | v <- S.toList $ F.supp sigma]
+  let sigma' = mksubst $ M.fromList [(v, sigma_def' v) | v <- S.toList $ F.supp sigma]
   (sigma'', block') <- inlineLoop sigma' (instrs block)
   cs' <- conflicts sigma'' vs
   let sigma_def''' v
-        | S.member v cs' = v
+        | S.member v cs' = PE.Var v
         | otherwise = sigma'' F.! v
-  let sigma''' = mkrenaming $ M.fromList [(v, sigma_def''' v) | v <- S.toList $ F.supp sigma'']
+  let sigma''' =
+        mksubst $ M.fromList [(v, sigma_def''' v) | v <- S.toList $ F.supp sigma'']
   (sigma'''', c') <- inlineLoop sigma''' c
   return (sigma'''', Block vs (Com block') : c')
 
 inline :: Program -> Pass Program
 inline Program{..} =
-  if M.null pDefs then do
-    ((sigma, pCom'), pDefs') <- runStateT (inlineLoop (mkrenaming M.empty) (instrs pCom)) M.empty
-    let pRewards' = fmap (subst (Var . (sigma F.!))) pRewards
+  if M.null (defs pDefs) then do
+    ((sigma, pCom'), pDefs') <-
+      runStateT (inlineLoop (mksubst M.empty) (instrs pCom)) (PE.mklocals M.empty)
+    let pRewards' = fmap (subst (sigma F.!)) pRewards
     return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
   else error "Inlining does not work with local definitions"
 
@@ -323,9 +328,9 @@ trim Program{..} =
   let keep0 = S.unions $ fmap (stateDeps pDefs) pRewards
       (pCom', _) = deadStoreElimOpt pDefs pCom keep0
       usedVars = comUsedVars pDefs pCom'
-      pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` usedVars) pDefs
+      pDefs' = M.filter (\(_, deps) -> deps `S.isSubsetOf` usedVars) (fst pDefs)
       pVarDecls' = M.filterWithKey (\v _ -> v `S.member` usedVars) pVarDecls in
-    Program{pVarDecls = pVarDecls', pCom = pCom', pDefs = pDefs', ..}
+    Program{pVarDecls = pVarDecls', pCom = pCom', pDefs = mklocals pDefs', ..}
 
 maybeOptimize ::
   (O.Options -> Bool) -> (Program -> Pass Program) -> Program -> Pass Program

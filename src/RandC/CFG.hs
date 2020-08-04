@@ -37,7 +37,7 @@ instance Pretty Program where
          , declarations pVarDecls
          , pretty "defs"
          , vcat [ sep [ pretty v, pretty "=", pretty e ]
-                | (v, (e, _)) <- M.assocs pDefs ]
+                | (v, (e, _)) <- M.assocs $ defs pDefs ]
          , pretty "rewards"
          , vcat [ sep [ pretty v, pretty "=", pretty e ]
                 | (v, e) <- M.assocs pRewards ]

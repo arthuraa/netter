@@ -16,6 +16,7 @@ import RandC.Var
 import RandC.Prob
 
 import GHC.Generics
+import Data.Text (Text)
 import Data.HashCons
 import Data.Functor.Identity
 import Data.Map.Strict (Map)
@@ -258,7 +259,14 @@ instance HasVars Expr where
   vars (BinOp _ e1 e2)    = vars e1 `S.union` vars e2
   vars (If e eThen eElse) = S.unions $ map vars [e, eThen, eElse]
 
-type Locals = Map Var (Expr, Set Var)
+type Locals = (Map Var (Expr, Set Var), Map Expr Var)
+
+defs :: Locals -> Map Var (Expr, Set Var)
+defs (m, _) = m
+
+mklocals :: Map Var (Expr, Set Var) -> Locals
+mklocals defs = (defs, revDefs)
+  where revDefs = M.fromList [(e, v) | (v, (e, _)) <- M.assocs defs]
 
 class HasStateDeps a where
   stateDeps :: Locals -> a -> S.Set Var
@@ -267,8 +275,8 @@ class HasStateDeps a where
 -- the dependency map, it is supposed to be part of the program state instead of
 -- a local definition.  In this case, the variable depends only on itself.
 instance HasStateDeps Var where
-  stateDeps locals v
-    | Just (_, deps) <- M.lookup v locals = deps
+  stateDeps (defs, _) v
+    | Just (_, deps) <- M.lookup v defs = deps
     | otherwise = S.singleton v
 
 instance HasStateDeps Expr where
@@ -284,12 +292,16 @@ instance HasStateDeps Int where
 instance HasStateDeps a => HasStateDeps (P a) where
   stateDeps deps e = S.unions $ fmap (stateDeps deps) e
 
-insertLocals :: Var -> Expr -> Locals -> Locals
-insertLocals v e locals =
-  if M.member v locals then
-    error $ "Variable " ++ show v ++ " is already defined in local map"
-  else let vDeps = stateDeps locals e in
-         M.insert v (e, vDeps) locals
+insertLocals :: MonadFresh m => Text -> Expr -> Locals -> m (Expr, Locals)
+insertLocals name e locals@(defs, revDefs)
+  | atomic e = return (e, locals)
+  | Just v <- M.lookup e revDefs = return (Var v, locals)
+  | otherwise = do
+      v <- fresh name
+      let vDeps = stateDeps locals e
+          defs' = M.insert v (e, vDeps) defs
+          revDefs' = M.insert e v revDefs in
+        return (Var v, (defs', revDefs'))
 
 counts :: Expr -> M.Map Var Int
 counts (Var v)            = M.singleton v 1

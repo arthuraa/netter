@@ -428,7 +428,7 @@ compileWith :: Options -> Prog () -> IO ()
 compileWith opts (Prog prog) = doPass opts $ do
   let prog' = runContT prog $ \_ -> return ()
   ((), S decls _locals rews coms) <- runStateT prog' $ S M.empty S.empty M.empty []
-  Compiler.compile (Imp.Program decls M.empty rews (Imp.revSeq coms))
+  Compiler.compile (Imp.Program decls (PE.mklocals M.empty) rews (Imp.revSeq coms))
 
 -- | Compile a program to Prism code, printing the result on standard output.
 -- The behavior of the compiler can be tweaked by command-line options

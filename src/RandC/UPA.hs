@@ -41,7 +41,7 @@ instance Pretty Module where
 instance Pretty Program where
   pretty Program{..} =
     vcat $ [ sep [pretty "def", pretty v, pretty "=", pretty e]
-           | (v, (e, _)) <- M.assocs pDefs] ++
+           | (v, (e, _)) <- M.assocs $ defs pDefs] ++
            [ sep [pretty "reward", pretty v, pretty "=", pretty e]
            | (v, e) <- M.assocs pRewards] ++
            map pretty pMods
