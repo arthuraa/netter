@@ -153,12 +153,13 @@ intern assn =
         return e' in
     mksubst <$> M.traverseWithKey intern1 assn'
 
-inlineLoop :: Subst -> [Instr] -> I (Subst, [Instr])
-inlineLoop sigma [] = return (sigma, [])
+inlineLoop :: (Var -> Bool) -> Subst -> [Instr] -> I (Subst, [Instr])
+inlineLoop _ sigma [] = return (sigma, [])
 
-inlineLoop sigma (Assn assn : c) = do
+inlineLoop canInline sigma (Assn assn : c) = do
   let assn' = substAssn sigma assn
-  let detAssn = M.mapMaybe (traverse ofP) assn'
+  let getRHS v e = if canInline v then traverse ofP e else Nothing
+  let detAssn = M.mapMaybeWithKey getRHS assn'
   detAssn' <- intern detAssn
   cs <- conflicts sigma (M.keysSet assn')
   locals <- get
@@ -172,14 +173,14 @@ inlineLoop sigma (Assn assn : c) = do
   let sigma' = mksubst
                $ M.fromList [(v, sigma_def v)
                             | v <- S.toList (S.union (F.supp detAssn') (F.supp sigma))]
-  (sigma'', c') <- inlineLoop sigma' c
+  (sigma'', c') <- inlineLoop canInline sigma' c
   return (sigma'', Assn assn' : c')
 
-inlineLoop sigma (If e cthen celse : c) = do
+inlineLoop canInline sigma (If e cthen celse : c) = do
   locals <- get
   let e' = subst (sigma F.!) e
-  (sigma_then, cthen') <- inlineLoop sigma (instrs cthen)
-  (sigma_else, celse') <- inlineLoop sigma (instrs celse)
+  (sigma_then, cthen') <- inlineLoop canInline sigma (instrs cthen)
+  (sigma_else, celse') <- inlineLoop canInline sigma (instrs celse)
   let modified = S.union (modVars (Com cthen')) (modVars (Com celse'))
   let canMerge = S.disjoint (stateDeps locals e') modified
   let sigma_def v
@@ -189,30 +190,38 @@ inlineLoop sigma (If e cthen celse : c) = do
   let sigma' = M.fromList [(v, sigma_def v)
                          | v <- S.toList $ S.union (F.supp sigma_then) (F.supp sigma_else) ]
   sigma'' <- intern $ fmap return sigma'
-  (sigma''', c') <- inlineLoop sigma'' c
+  (sigma''', c') <- inlineLoop canInline sigma'' c
   return (sigma''', If e' (Com cthen') (Com celse') : c')
 
-inlineLoop sigma (Block vs block : c) = do
+inlineLoop canInline sigma (Block vs block : c) = do
   cs <- conflicts sigma vs
   let sigma_def' v
         | S.member v cs = PE.Var v
         | otherwise = sigma F.! v
   let sigma' = mksubst $ M.fromList [(v, sigma_def' v) | v <- S.toList $ F.supp sigma]
-  (sigma'', block') <- inlineLoop sigma' (instrs block)
+  (sigma'', block') <- inlineLoop canInline sigma' (instrs block)
   cs' <- conflicts sigma'' vs
   let sigma_def''' v
         | S.member v cs' = PE.Var v
         | otherwise = sigma'' F.! v
   let sigma''' =
         mksubst $ M.fromList [(v, sigma_def''' v) | v <- S.toList $ F.supp sigma'']
-  (sigma'''', c') <- inlineLoop sigma''' c
+  (sigma'''', c') <- inlineLoop canInline sigma''' c
   return (sigma'''', Block vs (Com block') : c')
 
+noInlineVars :: Program -> Set Var
+noInlineVars Program{..} =
+  let keep0 = S.unions $ fmap (stateDeps pDefs) pRewards
+      live  = liveVars pDefs pCom keep0 in
+    live
+
 inline :: Program -> Pass Program
-inline Program{..} =
+inline prog@Program{..} =
   if M.null (defs pDefs) then do
+    let keep = noInlineVars prog
+    let canInline v = not $ v `S.member` keep
     ((sigma, pCom'), pDefs') <-
-      runStateT (inlineLoop (mksubst M.empty) (instrs pCom)) (PE.mklocals M.empty)
+      runStateT (inlineLoop canInline (mksubst M.empty) (instrs pCom)) (PE.mklocals M.empty)
     let pRewards' = fmap (subst (sigma F.!)) pRewards
     return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
   else error "Inlining does not work with local definitions"
@@ -305,6 +314,13 @@ deadStoreElimOptLoop (MBlock locals mblock _ mc deps_c) live =
       block' = deadStoreElimOptLoop mblock live''
       c' = deadStoreElimOptLoop mc live in
     Block locals (Com block') : c'
+
+liveVars :: Locals -> Com -> Set Var -> Set Var
+liveVars locals c vs0 =
+  let (_, deps_c, _) = deadStoreElimOptInit locals (instrs c)
+      vs = vs0 `S.union` liftDeps deps_c (F.supp deps_c)
+      live = liveVarsLoop (S.size vs) deps_c vs0 in
+    live
 
 deadStoreElimOpt :: Locals -> Com -> Set Var -> (Com, Set Var)
 deadStoreElimOpt defs c vs0 =
