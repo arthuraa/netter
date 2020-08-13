@@ -23,3 +23,9 @@
 * New verified inlining and variable elimination ("trimming") passes
 
 * Remove `formula`
+
+## 0.3.0.0 -- 2020-08-13
+
+* Minimize generated formulas during inlining.
+
+* Refine the `--inlining` option to control which variables are inlined.

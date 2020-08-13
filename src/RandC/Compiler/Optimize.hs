@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+ {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -216,16 +216,21 @@ noInlineVars Program{..} =
     live
 
 inline :: Program -> Pass Program
-inline prog@Program{..} =
-  if M.null (defs pDefs) then do
-    let keep = noInlineVars prog
-    let canInline v = not $ v `S.member` keep
-    ((sigma, pCom'), pDefs') <-
-      runStateT (inlineLoop canInline (mksubst M.empty) (instrs pCom)) (PE.mklocals M.empty)
-    let pRewards' = fmap (subst (sigma F.!)) pRewards
-    return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
-  else error "Inlining does not work with local definitions"
-
+inline prog@Program{..} = do
+  doInlining <- reader O.doInlining
+  case doInlining of
+    Just mode -> do
+      when (not $ M.null $ defs pDefs) $
+        error "Inlining does not work with local definitions"
+      let canInline O.DoAll  = const True
+          canInline O.DoPure = \v -> not $ v `S.member` keep
+            where keep = noInlineVars prog
+      ((sigma, pCom'), pDefs') <-
+        runStateT (inlineLoop (canInline mode) (mksubst M.empty) (instrs pCom))
+        (PE.mklocals M.empty)
+      let pRewards' = fmap (subst (sigma F.!)) pRewards
+      return Program{pDefs = pDefs', pRewards = pRewards', pCom = Com pCom', ..}
+    Nothing -> return prog
 type Dependencies = FFun Var (Set Var)
 
 mkdeps :: Map Var (Set Var) -> Dependencies
@@ -357,7 +362,7 @@ maybeOptimize opt f prog = do
 optimize :: Program -> Pass Program
 optimize =
   maybeOptimize O.simplify (return . simplify) >=>
-  maybeOptimize O.inlining inline              >=>
+  inline                                       >=>
   maybeOptimize O.trimming (return . trim)     >=>
   maybeOptimize O.merge    (return . merge)    >=>
   maybeOptimize O.simplify (return . simplify)
