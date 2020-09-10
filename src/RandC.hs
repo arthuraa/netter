@@ -59,7 +59,7 @@ module RandC (
   , (.<=), (.>=), (.<), (.>), (.==), (./=)
   -- * Logical operations
   , bool
-  , (.&&), (.||)
+  , (.&&), (.||), not'
   -- * Ternary operator
   --
   -- | @cond .? ifTrue .: ifFalse@ is similar to the ternary operator in C-like
@@ -364,6 +364,10 @@ infixr 3 .&&
 infixr 2 .||
 (.||) :: Expr -> Expr -> Expr
 (.||) = PE.BinOp PE.Or
+
+-- | Negation
+not' :: Expr -> Expr
+not' = PE.UnOp PE.Not
 
 -- | Multiplication.
 infixl 7 .*
