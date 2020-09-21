@@ -15,9 +15,10 @@ data Target = Imp   -- ^ The internal representation of programs
             | Prism -- ^ Prism source code
   deriving (Ord, Eq, Read, Show, Data, Typeable)
 
-data Inlining = All
-              | Pure
-              | None
+data Inlining = All  -- ^ Inline all possible expressions
+              | Pure -- ^ Inline only pure variables (i.e., those that do not
+                     -- receive sample results)
+              | None -- ^ Do not inline
   deriving (Ord, Eq, Read, Show, Data, Typeable, Enum)
 
 data Options = Options { target   :: Target         -- ^ The compilation target
