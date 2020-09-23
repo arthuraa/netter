@@ -9,11 +9,11 @@ source language Imp.
 
 -}
 
-module RandC.Prism.Expr where
+module Netter.Prism.Expr where
 
 
-import RandC.Var
-import RandC.Prob
+import Netter.Var
+import Netter.Prob
 
 import GHC.Generics
 import Data.Text (Text)

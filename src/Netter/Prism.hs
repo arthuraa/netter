@@ -1,10 +1,10 @@
 {-# LANGUAGE RecordWildCards, OverloadedStrings #-}
 
-module RandC.Prism where
+module Netter.Prism where
 
-import RandC.Var
-import RandC.Prism.Expr
-import RandC.Prob
+import Netter.Var
+import Netter.Prism.Expr
+import Netter.Prob
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc

@@ -1,13 +1,13 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-module RandC.G where
+module Netter.G where
 
 import qualified Data.Set as S
 import Data.Text.Prettyprint.Doc
-import RandC.Var
-import RandC.Prism.Expr hiding (If, simplify)
-import qualified RandC.Prism.Expr as PE
+import Netter.Var
+import Netter.Prism.Expr hiding (If, simplify)
+import qualified Netter.Prism.Expr as PE
 
 data G a = Return a
          | If Expr (G a) (G a)

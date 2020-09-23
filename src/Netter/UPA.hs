@@ -1,10 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module RandC.UPA where
+module Netter.UPA where
 
-import RandC.Var
-import RandC.Prob
-import RandC.Prism.Expr
+import Netter.Var
+import Netter.Prob
+import Netter.Prism.Expr
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc

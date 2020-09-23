@@ -1,12 +1,12 @@
-module RandC.Compiler.ImpToCFG where
+module Netter.Compiler.ImpToCFG where
 
-import RandC.Var
-import qualified RandC.Prism.Expr as PE
-import RandC.Options
-import RandC.G
-import RandC.Pass
-import qualified RandC.Imp as Src
-import qualified RandC.CFG as Tgt
+import Netter.Var
+import qualified Netter.Prism.Expr as PE
+import Netter.Options
+import Netter.G
+import Netter.Pass
+import qualified Netter.Imp as Src
+import qualified Netter.CFG as Tgt
 
 import qualified Data.Set as S
 import qualified Data.Map as M

@@ -1,8 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module RandC.Pass where
+module Netter.Pass where
 
-import RandC.Var
-import RandC.Options
+import Netter.Var
+import Netter.Options
 import Data.Functor.Identity
 import Data.Text.Prettyprint.Doc
 import Control.Monad.Reader

@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
-module RandC.Prob where
+module Netter.Prob where
 
-import RandC.Var
+import Netter.Var
 
 import Data.Text.Prettyprint.Doc
 import qualified Data.Map.Strict as M

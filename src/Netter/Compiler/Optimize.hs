@@ -3,19 +3,19 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module RandC.Compiler.Optimize where
+module Netter.Compiler.Optimize where
 
-import RandC.Var
-import RandC.Imp
-import RandC.Prob       hiding (resolve)
-import qualified RandC.G as G
-import RandC.G          hiding (If, simplify)
-import RandC.Pass
-import qualified RandC.Prism.Expr as PE
-import RandC.Prism.Expr hiding (If, simplify)
-import qualified RandC.Options as O
-import RandC.FFun (FFun)
-import qualified RandC.FFun as F
+import Netter.Var
+import Netter.Imp
+import Netter.Prob       hiding (resolve)
+import qualified Netter.G as G
+import Netter.G          hiding (If, simplify)
+import Netter.Pass
+import qualified Netter.Prism.Expr as PE
+import Netter.Prism.Expr hiding (If, simplify)
+import qualified Netter.Options as O
+import Netter.FFun (FFun)
+import qualified Netter.FFun as F
 
 import Control.Monad.Identity
 import Control.Monad.State

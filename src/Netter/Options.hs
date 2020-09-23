@@ -2,12 +2,12 @@
 
 -- | Options to tweak the behavior of the compiler.
 
-module RandC.Options where
+module Netter.Options where
 
 import System.Console.CmdArgs.Implicit
 
 data Target = Imp   -- ^ The internal representation of programs
-                    -- built by the 'RandC.Prog' monad.
+                    -- built by the 'Netter.Prog' monad.
             | CFG   -- ^ The first intermediate pass: convert the syntax of
                     -- 'Imp' commands into a control-flow graph.
             | UPA   -- ^ The last intermediate pass: introduce a PC variable to
@@ -52,5 +52,5 @@ doInlining opts =
 readOptions :: IO Options
 readOptions =
   cmdArgs $ defaultOptions
-          &= program "randc"
-          &= summary "randc v0.3.0.0"
+          &= program "netter"
+          &= summary "netter v0.3.2.0"

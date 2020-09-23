@@ -24,7 +24,7 @@ main = compile prog
 
 -}
 
-module RandC (
+module Netter (
   -- * Expressions and commands
   --
   -- | The language has a fairly standard separation between expressions
@@ -72,14 +72,14 @@ module RandC (
   , compile, compileWith
   ) where
 
-import RandC.Prob
-import RandC.Var
+import Netter.Prob
+import Netter.Var
 
-import RandC.Options
-import RandC.Pass
-import qualified RandC.Prism.Expr as PE
-import qualified RandC.Imp as Imp
-import qualified RandC.Compiler as Compiler
+import Netter.Options
+import Netter.Pass
+import qualified Netter.Prism.Expr as PE
+import qualified Netter.Imp as Imp
+import qualified Netter.Compiler as Compiler
 
 
 import Data.Text hiding (length, foldr, zip)
@@ -436,7 +436,7 @@ compileWith opts (Prog prog) = doPass opts $ do
 
 -- | Compile a program to Prism code, printing the result on standard output.
 -- The behavior of the compiler can be tweaked by command-line options
--- (cf. 'RandC.Options.Options').
+-- (cf. 'Netter.Options.Options').
 compile :: Prog () -> IO ()
 compile prog = do
   opts <- readOptions

@@ -1,6 +1,6 @@
-module RandC.Formatting where
+module Netter.Formatting where
 
-import RandC.Var
+import Netter.Var
 
 import qualified Data.Map.Strict as M
 import Data.Text.Prettyprint.Doc

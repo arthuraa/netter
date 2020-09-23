@@ -1,4 +1,4 @@
-# Revision history for randc
+# Revision history for netter
 
 ## 0.1.0.0  -- 2020-02-02
 
@@ -33,3 +33,7 @@
 ## 0.3.1.0 -- 2020-09-10
 
 * Add negation operator
+
+## 0.3.2.0 -- 2020-09-23
+
+Rename package from "randc" to "netter".

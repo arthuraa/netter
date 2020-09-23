@@ -1,4 +1,4 @@
-module RandC.FFun where
+module Netter.FFun where
 
 import Data.Map (Map)
 import Data.Set (Set)

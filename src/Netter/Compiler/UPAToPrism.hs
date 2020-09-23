@@ -1,9 +1,9 @@
-module RandC.Compiler.UPAToPrism where
+module Netter.Compiler.UPAToPrism where
 
-import RandC.Pass
-import qualified RandC.Prism.Expr as PE
-import qualified RandC.UPA   as Src
-import qualified RandC.Prism as Tgt
+import Netter.Pass
+import qualified Netter.Prism.Expr as PE
+import qualified Netter.UPA   as Src
+import qualified Netter.Prism as Tgt
 
 import qualified Data.Map.Strict as M
 

@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
-module RandC.Compiler.CFGToUPA where
+module Netter.Compiler.CFGToUPA where
 
-import RandC.Var
-import RandC.Prob
-import RandC.Options
-import RandC.G as G
-import RandC.Pass
-import RandC.Prism.Expr as PE
-import qualified RandC.CFG as Src
-import qualified RandC.UPA as Tgt
+import Netter.Var
+import Netter.Prob
+import Netter.Options
+import Netter.G as G
+import Netter.Pass
+import Netter.Prism.Expr as PE
+import qualified Netter.CFG as Src
+import qualified Netter.UPA as Tgt
 
 import qualified Data.Set        as S
 import qualified Data.Map.Strict as M

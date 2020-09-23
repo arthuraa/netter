@@ -1,12 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module RandC.CFG where
+module Netter.CFG where
 
-import RandC.Var
-import RandC.G
-import RandC.Prob
-import RandC.Prism.Expr
-import RandC.Formatting
+import Netter.Var
+import Netter.G
+import Netter.Prob
+import Netter.Prism.Expr
+import Netter.Formatting
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc

@@ -1,14 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module RandC.Imp where
+module Netter.Imp where
 
-import RandC.Var
+import Netter.Var
 
-import RandC.Formatting
-import RandC.Prism.Expr hiding (If)
-import RandC.G hiding (If)
-import RandC.Prob hiding (Choice)
+import Netter.Formatting
+import Netter.Prism.Expr hiding (If)
+import Netter.G hiding (If)
+import Netter.Prob hiding (Choice)
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc hiding (cat)

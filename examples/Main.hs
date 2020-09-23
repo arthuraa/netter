@@ -2,12 +2,12 @@
 
 module Main where
 
-import RandC
+import Netter
 
 import Control.Monad (forM, forM_)
 
--- This is a tutorial on how to use RandC to write simple probabilistic
--- programs.  Since RandC is a domain-specific language embedded in Haskell, you
+-- This is a tutorial on how to use Netter to write simple probabilistic
+-- programs.  Since Netter is a domain-specific language embedded in Haskell, you
 -- need to know some Haskell to use the language.  I'll try to explain basic
 -- Haskell concepts as we go along; for a more detailed introduction, you should
 -- refer to some other source, such as "Learn You a Haskell for Great Good"
@@ -17,7 +17,7 @@ import Control.Monad (forM, forM_)
 -- Our First Program
 -- =================
 --
--- Here is our first program in RandC.
+-- Here is our first program in Netter.
 
 firstProgram :: Prog ()
 firstProgram = do
@@ -28,10 +28,10 @@ firstProgram = do
   y .<-$ unif [1 .. 10] -- independently, storing them in x and y.
   z .<-  x .+ y         -- Add x and y, storing the result in z.
 
--- Because RandC is embedded in Haskell, we declare variables using a regular
+-- Because Netter is embedded in Haskell, we declare variables using a regular
 -- function 'var' rather than a special syntax.  Variables are initialized with
 -- their lower bounds, as in Prism.  The arrow @<-@ is Haskell syntax for
--- binding the result of a computation to a variable.  In RandC, commands,
+-- binding the result of a computation to a variable.  In Netter, commands,
 -- variable declarations and some other operations run in a monad 'Prog', which
 -- you see in the typing annotation for 'firstProgram'.  If you are still
 -- learning about monads, you should think of them as a special kinds of
@@ -42,9 +42,9 @@ firstProgram = do
 -- effect on the program that we are building and also returns something of type
 -- 'Expr' (the variables that we bind to @x@, @y@ and @z@).
 
--- RandC operators are different from their Haskell counterparts, because they
+-- Netter operators are different from their Haskell counterparts, because they
 -- run in Prism rather than in Haskell.  To avoid conflicts with Haskell
--- operators, we adopt a convention: RandC operators start with a @.@.  The
+-- operators, we adopt a convention: Netter operators start with a @.@.  The
 -- arrow '.<-$', for example, is a probabilistic assignment.  It is an infix
 -- operator that takes to arguments: a variable to store a sample and a
 -- distribution to sample from.  In this example, we sampling from uniform
@@ -66,7 +66,7 @@ samplingExample = do
 -- distribution with probability parameter 'p' for 'n' throws.  You will
 -- probably want to use some of these operations:
 --
--- - @int :: Int -> Expr@ Convert an 'Int' to a RandC expression
+-- - @int :: Int -> Expr@ Convert an 'Int' to a Netter expression
 --
 -- - @fromIntegral :: Int -> Double@ Convert an 'Int' to a 'Double'
 --
@@ -81,16 +81,16 @@ binomial = undefined
 -- Compiling a program
 -- ===================
 
--- To compile a RandC program, we use the 'compile' function, as shown below.
+-- To compile a Netter program, we use the 'compile' function, as shown below.
 -- To see the result of the compilation, you can run @make@ in this directory
 -- and open the file @examples.pm@.  As you go over this tutorial, you can
 -- replace 'firstProgram' by other functions of type @Prog ()@ to see how they
 -- are compiled.
 
--- In general, variables in the output of RandC are automatically generated,
+-- In general, variables in the output of Netter are automatically generated,
 -- because there is no way for 'var' to know the name of the variable its result
 -- is bound to.  This can make the models hard to understand.  For debugging
--- purposes, RandC provides a 'namedVar' function that fixes the name of the
+-- purposes, Netter provides a 'namedVar' function that fixes the name of the
 -- variable in the compiled code.  For instance, we can fix the name of @x@ by
 -- replacing its declaration with @x <- namedVar "x" 1 10@. Try it!
 
@@ -101,17 +101,17 @@ main = compile network
 -- Try simulating the model for a few steps: go to "Simulator > New Path" and
 -- click on "Simulate" a few times.
 
--- Unlike most languages, programs in RandC are meant to run forever: every
+-- Unlike most languages, programs in Netter are meant to run forever: every
 -- program is implicitly enclosed in an infinite loop. When simulating a
 -- program, you will notice a special @pc_0@ variable.  This variable marks the
 -- point of the program that we are currently executing, with @0@ denoting the
 -- initial point of the program. In the rest of this document, we'll refer to
--- each execution of a RandC program as a /cycle/.
+-- each execution of a Netter program as a /cycle/.
 
 -- Simple Imperative Programming
 -- =============================
 --
--- RandC has most basic operators of imperative programming.  For instance, the
+-- Netter has most basic operators of imperative programming.  For instance, the
 -- 'if'' function allows us to run code conditionally:
 
 ifExample :: Prog ()
@@ -136,7 +136,7 @@ haskellIf x y = if x <= 3 then y else x - 2
 -- running the model checker.  By contrast, when evaluating 'haskellIf' on some
 -- arguments, we can perform the test @x <= 3@ and decide which branch we need
 -- to execute.  Whenever needed, we use primed names (if', when', max', etc.) to
--- distinguish RandC functions from their Haskell equivalents.
+-- distinguish Netter functions from their Haskell equivalents.
 
 -- Exercise 2: Define a function 'exercise2' that samples two variables 'x' and
 -- 'y' uniformly from 1 to 10 and stores their maximum in 'x'.  Use the if'
@@ -179,7 +179,7 @@ switchExample = do
 
 -- Prism allows us to check various properties of probilistic programs. For
 -- instance, we might want to compute the average of some quantity.  To do this,
--- we must declare these quantities in RandC using the 'rewards' function:
+-- we must declare these quantities in Netter using the 'rewards' function:
 
 rewardExample :: Prog ()
 rewardExample = do
@@ -190,7 +190,7 @@ rewardExample = do
 -- Data structures
 -- ===============
 
--- RandC does not have complex data structures such as arrays, records, lists,
+-- Netter does not have complex data structures such as arrays, records, lists,
 -- etc.: all we have are bounded integer variables.  Fortunately, we can use
 -- Haskell to emulate some of this functionality.  To illustrate, let us
 -- consider the model of a simple network.  The network consists of a set of
