@@ -27,6 +27,7 @@ data Options = Options { target   :: Target         -- ^ The compilation target
                        , merge    :: Bool           -- ^ Perform assignments in parallel when possible
                        , simplify :: Bool           -- ^ Perform simplications
                        , output   :: Maybe FilePath -- ^ Output file
+                       , other    :: [String]       -- ^ Other command-line arguments
                        }
   deriving (Ord, Eq, Show, Data, Typeable)
 
@@ -38,6 +39,7 @@ defaultOptions =
           , merge    = True     &= help "Perform assignments in parallel when possible"
           , simplify = True     &= help "Perform simplifications"
           , output   = Nothing  &= help "Output file. If none is present, output to stdout."
+          , other    = []       &= args
           }
 
 data DoInlining = DoAll | DoPure
@@ -53,4 +55,4 @@ readOptions :: IO Options
 readOptions =
   cmdArgs $ defaultOptions
           &= program "netter"
-          &= summary "netter v0.3.2.0"
+          &= summary "netter v0.3.3.0"
