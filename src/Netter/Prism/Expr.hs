@@ -170,6 +170,8 @@ simplify1 o e@(Const (Bool b)) =
   case o of
     Not -> Const (Bool (not b))
     _   -> error $ "Expr: found ill-typed expression " ++ show (pretty (UnOp o e))
+simplify1 Not (UnOp Not e) = e
+
 simplify1 o e@(Const (Int _)) =
   case o of
     Ceil  -> e

@@ -36,4 +36,10 @@
 
 ## 0.3.2.0 -- 2020-09-23
 
-Rename package from "randc" to "netter".
+* Rename package from "randc" to "netter".
+
+## 0.3.3.0
+
+* Allow models to process custom command-line options through the `other` field.
+
+* Remove double negation during simplification.
