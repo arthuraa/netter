@@ -46,12 +46,20 @@ contradictEq e1 n1 (BinOp Eq e2 (Const (Int n2)))
   | otherwise = False
 contradictEq _ _ _ = False
 
+contradictNeq :: Expr -> Int -> Expr -> Bool
+contradictNeq e1 n1 (UnOp Not (BinOp Eq e2 (Const (Int n2))))
+  | e1 == e2 && n1 /= n2 = True
+  | otherwise = False
+contradictNeq _ _ _ = False
+
 -- | Add a guard to a list of guards, except if the guard is of the form "e /=
 -- n" and is already implied by the other guards.
 addGuard :: Expr -> [Expr] -> [Expr]
 addGuard guard@(UnOp Not (BinOp Eq e (Const (Int n)))) guards
   | any (contradictEq e n) guards = guards
   | otherwise = guard : guards
+addGuard guard@(BinOp Eq e (Const (Int n))) guards =
+  guard : [e' | e' <- guards, not (contradictNeq e n e')]
 addGuard guard guards = guard : guards
 
 flatten :: G a -> [([Expr], a)]
