@@ -43,3 +43,6 @@
 * Allow models to process custom command-line options through the `other` field.
 
 * Remove double negation during simplification.
+
+* Better compilation of "if e == n1 then .. else if e == nk then .."
+

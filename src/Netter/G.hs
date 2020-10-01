@@ -40,10 +40,25 @@ simplify (If e x y) =
            Const (Bool b) -> if b then x' else y'
            _ -> If e' x' y'
 
+contradictEq :: Expr -> Int -> Expr -> Bool
+contradictEq e1 n1 (BinOp Eq e2 (Const (Int n2)))
+  | e1 == e2 && n1 /= n2 = True
+  | otherwise = False
+contradictEq _ _ _ = False
+
+-- | Add a guard to a list of guards, except if the guard is of the form "e /=
+-- n" and is already implied by the other guards.
+addGuard :: Expr -> [Expr] -> [Expr]
+addGuard guard@(UnOp Not (BinOp Eq e (Const (Int n)))) guards
+  | any (contradictEq e n) guards = guards
+  | otherwise = guard : guards
+addGuard guard guards = guard : guards
+
 flatten :: G a -> [([Expr], a)]
 flatten x = go [] x
   where go guards (Return x) = [(guards, x)]
-        go guards (If e x y) = go (e : guards) x ++ go (UnOp Not e : guards) y
+        go guards (If e x y) = go (addGuard e guards) x ++
+                               go (addGuard (UnOp Not e) guards) y
 
 toExpr :: G PE.Expr -> PE.Expr
 toExpr (Return e) = e
