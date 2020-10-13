@@ -6,8 +6,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice
 
 From extructures Require Import ord fset.
 
-From void Require Import void.
-
 From deriving Require Import deriving.
 
 From RandC Require Import Extra.

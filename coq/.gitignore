@@ -4,6 +4,6 @@
 *.vos
 *.vok
 *.glob
-Makefile
-Makefile.conf
-.Makefile.d
+CoqMakefile
+CoqMakefile.conf
+.CoqMakefile.d
