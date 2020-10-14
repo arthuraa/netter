@@ -214,7 +214,7 @@ Arguments bigcupP {_ _ _ _ _ _}.
 Arguments mkfmap {_ _}.
 Arguments suppPn {_ _ _ _ _}.
 
-Axiom int_ordMixin : Ord.mixin_of int.
+Definition int_ordMixin := CanOrdMixin natsum_of_intK.
 Canonical int_ordType := Eval hnf in OrdType int int_ordMixin.
 
 Definition rat_ordMixin := [ordMixin of rat by <:].

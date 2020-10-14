@@ -26,6 +26,8 @@ Definition var_choiceMixin := [derive choiceMixin for var].
 Canonical var_choiceType := Eval hnf in ChoiceType var var_choiceMixin.
 Definition var_ordMixin := Eval simpl in [derive ordMixin for var].
 Canonical var_ordType := OrdType var var_ordMixin.
+Definition var_countMixin := [derive countMixin for var].
+Canonical var_countType := Eval hnf in CountType var var_countMixin.
 
 Inductive symbol :=
 | SVar of var
@@ -47,23 +49,69 @@ Definition symbol_choiceMixin := [derive choiceMixin for symbol].
 Canonical symbol_choiceType := Eval hnf in ChoiceType symbol symbol_choiceMixin.
 Definition symbol_ordMixin := [derive ordMixin for symbol].
 Canonical symbol_ordType := Eval hnf in OrdType symbol symbol_ordMixin.
+Definition symbol_countMixin := [derive countMixin for symbol].
+Canonical symbol_countType := Eval hnf in CountType symbol symbol_countMixin.
 
 Inductive comp_op :=
 | Leq
 | Ltq.
 
+Definition comp_op_indMixin := [indMixin for comp_op_rect].
+Canonical comp_op_indType := Eval hnf in IndType _ comp_op comp_op_indMixin.
+Definition comp_op_eqMixin := [derive eqMixin for comp_op].
+Canonical comp_op_eqType := Eval hnf in EqType comp_op comp_op_eqMixin.
+Definition comp_op_choiceMixin := [derive choiceMixin for comp_op].
+Canonical comp_op_choiceType := Eval hnf in ChoiceType comp_op comp_op_choiceMixin.
+Definition comp_op_ordMixin := [derive ordMixin for comp_op].
+Canonical comp_op_ordType := Eval hnf in OrdType comp_op comp_op_ordMixin.
+Definition comp_op_countMixin := [derive countMixin for comp_op].
+Canonical comp_op_countType := Eval hnf in CountType comp_op comp_op_countMixin.
+
 Inductive log_op :=
 | And
 | Or.
+
+Definition log_op_indMixin := [indMixin for log_op_rect].
+Canonical log_op_indType := Eval hnf in IndType _ log_op log_op_indMixin.
+Definition log_op_eqMixin := [derive eqMixin for log_op].
+Canonical log_op_eqType := Eval hnf in EqType log_op log_op_eqMixin.
+Definition log_op_choiceMixin := [derive choiceMixin for log_op].
+Canonical log_op_choiceType := Eval hnf in ChoiceType log_op log_op_choiceMixin.
+Definition log_op_ordMixin := [derive ordMixin for log_op].
+Canonical log_op_ordType := Eval hnf in OrdType log_op log_op_ordMixin.
+Definition log_op_countMixin := [derive countMixin for log_op].
+Canonical log_op_countType := Eval hnf in CountType log_op log_op_countMixin.
 
 Inductive arith_op :=
 | Plus
 | Times
 | Minus.
 
+Definition arith_op_indMixin := [indMixin for arith_op_rect].
+Canonical arith_op_indType := Eval hnf in IndType _ arith_op arith_op_indMixin.
+Definition arith_op_eqMixin := [derive eqMixin for arith_op].
+Canonical arith_op_eqType := Eval hnf in EqType arith_op arith_op_eqMixin.
+Definition arith_op_choiceMixin := [derive choiceMixin for arith_op].
+Canonical arith_op_choiceType := Eval hnf in ChoiceType arith_op arith_op_choiceMixin.
+Definition arith_op_ordMixin := [derive ordMixin for arith_op].
+Canonical arith_op_ordType := Eval hnf in OrdType arith_op arith_op_ordMixin.
+Definition arith_op_countMixin := [derive countMixin for arith_op].
+Canonical arith_op_countType := Eval hnf in CountType arith_op arith_op_countMixin.
+
 Inductive trunc_op :=
 | Ceil
 | Floor.
+
+Definition trunc_op_indMixin := [indMixin for trunc_op_rect].
+Canonical trunc_op_indType := Eval hnf in IndType _ trunc_op trunc_op_indMixin.
+Definition trunc_op_eqMixin := [derive eqMixin for trunc_op].
+Canonical trunc_op_eqType := Eval hnf in EqType trunc_op trunc_op_eqMixin.
+Definition trunc_op_choiceMixin := [derive choiceMixin for trunc_op].
+Canonical trunc_op_choiceType := Eval hnf in ChoiceType trunc_op trunc_op_choiceMixin.
+Definition trunc_op_ordMixin := [derive ordMixin for trunc_op].
+Canonical trunc_op_ordType := Eval hnf in OrdType trunc_op trunc_op_ordMixin.
+Definition trunc_op_countMixin := [derive countMixin for trunc_op].
+Canonical trunc_op_countType := Eval hnf in CountType trunc_op trunc_op_countMixin.
 
 Unset Elimination Schemes.
 Inductive bexpr :=
@@ -225,18 +273,165 @@ Qed.
 
 End Eval.
 
-Axiom bexpr_eqMixin : Equality.mixin_of bexpr.
+Section Instances.
+
+Import GenTree.
+
+Fixpoint tree_of_bexpr be : tree nat :=
+  match be with
+  | BConst b =>
+    Node 0 [:: Leaf (pickle b)]
+  | BEqB be1 be2 =>
+    Node 1 [:: tree_of_bexpr be1; tree_of_bexpr be2]
+  | BEqZ ze1 ze2 =>
+    Node 2 [:: tree_of_zexpr ze1; tree_of_zexpr ze2]
+  | BEqQ qe1 qe2 =>
+    Node 3 [:: tree_of_qexpr qe1; tree_of_qexpr qe2]
+  | BTest be1 be2 be3 =>
+    Node 4 [:: tree_of_bexpr be1; tree_of_bexpr be2; tree_of_bexpr be3]
+  | BCompZ co ze1 ze2 =>
+    Node 5 [:: Leaf (pickle co); tree_of_zexpr ze1; tree_of_zexpr ze2]
+  | BCompQ co qe1 qe2 =>
+    Node 6 [:: Leaf (pickle co); tree_of_qexpr qe1; tree_of_qexpr qe2]
+  | BLogOp lo be1 be2 =>
+    Node 7 [:: Leaf (pickle lo); tree_of_bexpr be1; tree_of_bexpr be2]
+  | BNot be =>
+    Node 8 [:: tree_of_bexpr be]
+  end
+
+with tree_of_zexpr ze : tree nat :=
+  match ze with
+  | ZSym s =>
+    Node 0 [:: Leaf (pickle s)]
+  | ZConst n =>
+    Node 1 [:: Leaf (pickle n)]
+  | ZTest be ze1 ze2 =>
+    Node 2 [:: tree_of_bexpr be; tree_of_zexpr ze1; tree_of_zexpr ze2]
+  | ZArith ao ze1 ze2 =>
+    Node 3 [:: Leaf (pickle ao); tree_of_zexpr ze1; tree_of_zexpr ze2]
+  | ZTrunc to qe =>
+    Node 4 [:: Leaf (pickle to); tree_of_qexpr qe]
+  end
+
+with tree_of_qexpr qe : tree nat :=
+  match qe with
+  | QConst q =>
+    Node 0 [:: Leaf (pickle q)]
+  | QTest be qe1 qe2 =>
+    Node 1 [:: tree_of_bexpr be; tree_of_qexpr qe1; tree_of_qexpr qe2]
+  | QArith ao qe1 qe2 =>
+    Node 2 [:: Leaf (pickle ao); tree_of_qexpr qe1; tree_of_qexpr qe2]
+  | QOfZ ze =>
+    Node 3 [:: tree_of_zexpr ze]
+  end.
+
+Definition unpickle_def {T : countType} (def : T) (n : nat) : T :=
+  odflt def (unpickle n).
+
+Lemma pickleK' (T : countType) (def : T) : cancel pickle (unpickle_def def).
+Proof. by move=> x; rewrite /unpickle_def pickleK. Qed.
+
+Fixpoint bexpr_of_tree (be : tree nat) : bexpr :=
+  match be with
+  | Node 0 [:: Leaf b] =>
+    BConst (unpickle_def true b)
+  | Node 1 [:: be1; be2] =>
+    BEqB (bexpr_of_tree be1) (bexpr_of_tree be2)
+  | Node 2 [:: ze1; ze2] =>
+    BEqZ (zexpr_of_tree ze1) (zexpr_of_tree ze2)
+  | Node 3 [:: qe1; qe2] =>
+    BEqQ (qexpr_of_tree qe1) (qexpr_of_tree qe2)
+  | Node 4 [:: be1; be2; be3] =>
+    BTest (bexpr_of_tree be1) (bexpr_of_tree be2) (bexpr_of_tree be3)
+  | Node 5 [:: Leaf co; ze1; ze2] =>
+    BCompZ (unpickle_def Leq co) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
+  | Node 6 [:: Leaf co; qe1; qe2] =>
+    BCompQ (unpickle_def Leq co) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
+  | Node 7 [:: Leaf lo; be1; be2] =>
+    BLogOp (unpickle_def And lo) (bexpr_of_tree be1) (bexpr_of_tree be2)
+  | Node 8 [:: be] => BNot (bexpr_of_tree be)
+  | _ => BConst false
+  end
+
+with zexpr_of_tree ze : zexpr :=
+  match ze with
+  | Node 0 [:: Leaf s] =>
+    ZSym (unpickle_def (SFor 0) s)
+  | Node 1 [:: Leaf n] =>
+    ZConst (unpickle_def (0 : int) n)
+  | Node 2 [:: be; ze1; ze2] =>
+    ZTest (bexpr_of_tree be) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
+  | Node 3 [:: Leaf ao; ze1; ze2] =>
+    ZArith (unpickle_def Plus ao) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
+  | Node 4 [:: Leaf to; qe] =>
+    ZTrunc (unpickle_def Ceil to) (qexpr_of_tree qe)
+  | _ => ZConst 0
+  end
+
+with qexpr_of_tree qe : qexpr :=
+  match qe with
+  | Node 0 [:: Leaf q] =>
+    QConst (unpickle_def 0%Q q)
+  | Node 1 [:: be; qe1; qe2] =>
+    QTest (bexpr_of_tree be) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
+  | Node 2 [:: Leaf ao; qe1; qe2] =>
+    QArith (unpickle_def Plus ao) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
+  | Node 3 [:: ze] =>
+    QOfZ (zexpr_of_tree ze)
+  | _ => QConst 0
+  end.
+
+Lemma tree_of_exprK : cancel tree_of_bexpr bexpr_of_tree /\
+                      cancel tree_of_zexpr zexpr_of_tree /\
+                      cancel tree_of_qexpr qexpr_of_tree.
+Proof.
+apply: expr_ind=> // *;
+by rewrite /= ?pickleK' //;
+repeat match goal with
+| H : ?x = _ |- context[?x] => rewrite {}H //
+end.
+Qed.
+
+Lemma tree_of_bexprK : cancel tree_of_bexpr bexpr_of_tree.
+Proof. by case: tree_of_exprK=> [? [??]]. Qed.
+
+Lemma tree_of_zexprK : cancel tree_of_zexpr zexpr_of_tree.
+Proof. by case: tree_of_exprK=> [? [??]]. Qed.
+
+Lemma tree_of_qexprK : cancel tree_of_qexpr qexpr_of_tree.
+Proof. by case: tree_of_exprK=> [? [??]]. Qed.
+
+Lemma bexpr_eqMixin : Equality.mixin_of bexpr.
+Proof. exact: CanEqMixin tree_of_bexprK. Qed.
 Canonical bexpr_eqType := EqType bexpr bexpr_eqMixin.
-Axiom bexpr_choiceMixin : Choice.mixin_of bexpr.
+Lemma bexpr_choiceMixin : Choice.mixin_of bexpr.
+Proof. exact: CanChoiceMixin tree_of_bexprK. Qed.
 Canonical bexpr_choiceType := Eval hnf in ChoiceType bexpr bexpr_choiceMixin.
-Axiom bexpr_ordMixin : Ord.mixin_of bexpr.
+Lemma bexpr_ordMixin : Ord.mixin_of bexpr.
+Proof. exact: CanOrdMixin tree_of_bexprK. Qed.
 Canonical bexpr_ordType := Eval hnf in OrdType bexpr bexpr_ordMixin.
-Axiom zexpr_eqMixin : Equality.mixin_of zexpr.
+
+Lemma zexpr_eqMixin : Equality.mixin_of zexpr.
+Proof. exact: CanEqMixin tree_of_zexprK. Qed.
 Canonical zexpr_eqType := EqType zexpr zexpr_eqMixin.
-Axiom zexpr_choiceMixin : Choice.mixin_of zexpr.
+Lemma zexpr_choiceMixin : Choice.mixin_of zexpr.
+Proof. exact: CanChoiceMixin tree_of_zexprK. Qed.
 Canonical zexpr_choiceType := Eval hnf in ChoiceType zexpr zexpr_choiceMixin.
-Axiom zexpr_ordMixin : Ord.mixin_of zexpr.
+Lemma zexpr_ordMixin : Ord.mixin_of zexpr.
+Proof. exact: CanOrdMixin tree_of_zexprK. Qed.
 Canonical zexpr_ordType := Eval hnf in OrdType zexpr zexpr_ordMixin.
+
+Lemma qexpr_eqMixin : Equality.mixin_of qexpr.
+Proof. exact: CanEqMixin tree_of_qexprK. Qed.
+Canonical qexpr_eqType := EqType qexpr qexpr_eqMixin.
+Lemma qexpr_choiceMixin : Choice.mixin_of qexpr.
+Proof. exact: CanChoiceMixin tree_of_qexprK. Qed.
+Canonical qexpr_choiceType := Eval hnf in ChoiceType qexpr qexpr_choiceMixin.
+Lemma qexpr_ordMixin : Ord.mixin_of qexpr.
+Proof. exact: CanOrdMixin tree_of_qexprK. Qed.
+Canonical qexpr_ordType := Eval hnf in OrdType qexpr qexpr_ordMixin.
+
+End Instances.
 
 Fixpoint bexpr_syms be :=
   match be with
