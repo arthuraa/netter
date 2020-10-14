@@ -1,3 +1,11 @@
+(** Theory of finite probability distributions.  This file defines the {prob T}
+type, which represents finite probability distributions with rational
+coefficients over the type [T], which is required to be an ordered type.
+Distributions form a monad, where the unit [dirac : T -> {prob T}] is the point
+mass distribution, whereas the monadic bind [sample : {prob T} -> (T -> {prob
+S}) -> {prob S}] samples from its first argument and feeds the sample to its
+second argument. *)
+
 Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
@@ -21,6 +29,10 @@ Section Prob.
 
 Variable T : ordType.
 Implicit Types (x : T) (X : {fset T}) (f : T -> rat).
+
+(** We define probability distributions in two stages.  First, we define a
+distribution as a map into the positive rationals that is 0 almost everywhere.
+Then, we define {prob T} as the type of distributions of mass 1. *)
 
 Record distr := Distr {
   dval :> ffun (fun _ : T => 0 : rat);
@@ -155,6 +167,8 @@ Lemma dirac_subproof2 x : \sum_(x' <- fset1 x) dirac_def x x' = 1.
 Proof.
 by rewrite /= big_seq1 /dirac_def eqxx.
 Qed.
+
+(** Point mass distribution *)
 
 Definition dirac x :=
   mkprob (@dirac_subproof1 x) (dirac_subproof2 x).
@@ -310,13 +324,15 @@ Arguments supp_sampleP {_ _ _ _ _}.
 Declare Scope prob_scope.
 Local Open Scope prob_scope.
 
+(** A more convenient notation for sampling. *)
+
 Notation "'sample:' x '<-' t1 ';' t2" :=
   (sample t1 (fun x => t2))
   (at level 20, t1 at level 100, t2 at level 200,
    right associativity, format "'[' 'sample:'  x  '<-'  '[' t1 ;  ']' ']' '/' t2")
   : prob_scope.
 
-Section SampleProps.
+Section SampleProperties.
 
 Variables T S : ordType.
 
@@ -380,7 +396,7 @@ suff: z \in fset1 y by move=> /fset1P => <-.
 by rewrite -e; apply/bigcupP; exists x.
 Qed.
 
-End SampleProps.
+End SampleProperties.
 
 Lemma sampleA (T S R : ordType) p (f : T -> {prob S}) (g : S -> {prob R}) :
   (sample: y <- (sample: x <- p; f x); g y) =
@@ -421,6 +437,15 @@ by rewrite /= exchange_big.
 Qed.
 
 Open Scope prob_scope.
+
+(** To simplify the reasoning about our optimizations, we use probabilistic
+couplings.  A coupling is a way of lifting a relation between two sets to a
+relation over distributions over these sets.  (NB: We define this relation in
+[Type] to avoid issues with the axiom of choice when proving [coupling_sample]
+below.)  The definition is useful because (1) it has good composition
+properties, as seen by [coupling_dirac] and [coupling_sample], and because (2)
+it is strong enough to establish the equality of two distributions, as seen in
+[coupling_same]. *)
 
 Variant coupling (T S : ordType) (R : T -> S -> Prop) pT pS : Type :=
 | Coupling p of
@@ -545,6 +570,10 @@ case=> x y xyP; apply: R12; last exact: R1P.
 - rewrite eS; apply/supp_sampleP.
   by exists (x, y)=> //; rewrite // supp_dirac in_fset1.
 Qed.
+
+(** The following definitions allow us to apply probabilistic computations to
+the elements of sequences, maps and other container types.  They will be used to
+define the semantics of Imp programs. *)
 
 Definition foldrM T (S : ordType) (f : T -> S -> {prob S}) (y : S) (xs : seq T) : {prob S} :=
   foldr (fun x p => sample p (f x)) (dirac y) xs.
