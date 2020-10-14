@@ -16,6 +16,10 @@ Unset Printing Implicit Defensive.
 
 Local Open Scope fset_scope.
 
+(** Variables correspond to state variables that appear in user source
+code. They carry a number so that we can always generate fresh variables with
+the same base name (though this functionality is not being used right now). *)
+
 Inductive var := Var {vname : string; vnum : nat}.
 
 Definition var_indMixin := Eval simpl in [indMixin for var_rect].
@@ -28,6 +32,13 @@ Definition var_ordMixin := Eval simpl in [derive ordMixin for var].
 Canonical var_ordType := OrdType var var_ordMixin.
 Definition var_countMixin := [derive countMixin for var].
 Canonical var_countType := Eval hnf in CountType var var_countMixin.
+
+(** A symbol is either a state variable or a formula identifier.  This
+distinction does not exist in the Haskell implementation, but we introduce it
+here because the substitution and evaluation functions have different behaviors
+on state variables and formulas. For simplicity, symbols can only be used in
+integer expressions below; thus, the states of our language will only store
+integers as well. *)
 
 Inductive symbol :=
 | SVar of var
@@ -51,6 +62,8 @@ Definition symbol_ordMixin := [derive ordMixin for symbol].
 Canonical symbol_ordType := Eval hnf in OrdType symbol symbol_ordMixin.
 Definition symbol_countMixin := [derive countMixin for symbol].
 Canonical symbol_countType := Eval hnf in CountType symbol symbol_countMixin.
+
+(** Various operators that appear in the syntax. *)
 
 Inductive comp_op :=
 | Leq
@@ -112,6 +125,10 @@ Definition trunc_op_ordMixin := [derive ordMixin for trunc_op].
 Canonical trunc_op_ordType := Eval hnf in OrdType trunc_op trunc_op_ordMixin.
 Definition trunc_op_countMixin := [derive countMixin for trunc_op].
 Canonical trunc_op_countType := Eval hnf in CountType trunc_op trunc_op_countMixin.
+
+(** The syntax of expressions proper.  In the Haskell code, expressions are
+untyped, but here they are segregated into boolean, integer and rational
+expressions for convenience. *)
 
 Unset Elimination Schemes.
 Inductive bexpr :=
@@ -313,6 +330,8 @@ Canonical qexpr_ordType := Eval hnf in OrdType qexpr qexpr_ordMixin.
 
 End Instances.
 
+(** Evaluate expressions given an interpretation of symbols [f]. *)
+
 Section Eval.
 
 Implicit Types (be : bexpr) (ze : zexpr) (qe : qexpr).
@@ -363,6 +382,8 @@ with eval_qexpr f qe : rat :=
   | QOfZ ze => ratz (eval_zexpr f ze)
   end.
 
+(** Substitute an expression for a symbol. *)
+
 Fixpoint subst_bexpr f be : bexpr :=
   match be with
   | BConst _ => be
@@ -404,6 +425,8 @@ Ltac solve_subst_exprP :=
     rewrite {}e
   end.
 
+(** Substitution commutes with evaluation. *)
+
 Lemma subst_exprP f g :
   (forall e,
       eval_bexpr f (subst_bexpr g e) =
@@ -441,6 +464,7 @@ Qed.
 
 End Eval.
 
+(** Compute all symbols used in an expression. *)
 
 Fixpoint bexpr_syms be :=
   match be with
@@ -491,6 +515,9 @@ Ltac solve_eq_in_eval_exprP :=
 
 Implicit Types V : {fset symbol}.
 
+(** Symbols that do not appear in an expression have no effect when evaluating
+it. *)
+
 Lemma eq_in_eval_expr V f g :
   {in V, f =1 g} ->
   (forall be, fsubset (bexpr_syms be) V ->
@@ -532,7 +559,15 @@ move=> fg ?; apply: eq_in_eval_zexpr (fsubsetxx _).
 move=> ??; exact: fg.
 Qed.
 
+(** The [formulas] type defines formula environments, which are maps from nats
+(formula identifiers) to integer expressions.  The definitions on this list can
+mention other formulas.  The indices are always references to formulas that
+appear later on the list.  Thus, the definitions are well founded. *)
+
 Definition formulas := seq (nat * zexpr).
+
+(** Given a formula environment [defs], a state [st] and a formula [f], we can
+evaluate [f] under the environment [defs] and state [st].  *)
 
 Fixpoint feval_forms (defs : formulas) st (f : nat) : int :=
   if defs is (f', e) :: fs then
@@ -551,6 +586,9 @@ Definition feval_sym defs st s : int :=
   | SFor f => feval_forms defs st f
   end.
 
+(** Compute the set of state variables that are needed to evaluate a formula [f]
+under a formula environment [defs].  *)
+
 Fixpoint formula_vars (defs : formulas) (f : nat) : {fset var} :=
   if defs is (f', e) :: defs then
     if f' == f then
@@ -568,6 +606,10 @@ Definition sym_vars defs s : {fset var} :=
   | SFor f => formula_vars defs f
   end.
 
+(** If two states [st1] and [st2] agree on the state variables that are needed
+to compute the value of [s] under the formulas [defs], then evaluating [s] under
+the two yields the same result. *)
+
 Lemma eq_in_feval_sym defs st1 st2 s :
   {in sym_vars defs s, st1 =1 st2} ->
   feval_sym defs st1 s = feval_sym defs st2 s.
@@ -580,6 +622,8 @@ move=> [v|f'] in_e.
   by apply: est; apply/bigcupP; exists (SVar v); rewrite // in_fset1 eqxx.
 by apply: IH=> // v in_f'; apply: est; apply/bigcupP; exists (SFor f').
 Qed.
+
+(** Lift symbol evaluation and variable dependencies to expressions. *)
 
 Definition feval_bexpr defs st e :=
   eval_bexpr (feval_sym defs st) e.
