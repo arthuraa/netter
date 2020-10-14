@@ -2,7 +2,7 @@ Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat choice 
-  seq ssrint rat ssralg ssrnum.
+  seq ssrint rat ssralg ssrnum intdiv.
 
 From extructures Require Import ord fset.
 
@@ -151,127 +151,7 @@ with   qexpr_ind := Induction for qexpr Sort Prop.
 
 Combined Scheme expr_ind from bexpr_ind, zexpr_ind, qexpr_ind.
 
-Section Eval.
-
-Implicit Types (be : bexpr) (ze : zexpr) (qe : qexpr).
-
-Fixpoint eval_bexpr f be : bool :=
-  match be with
-  | BConst b => b
-  | BEqB be1 be2 => eval_bexpr f be1 == eval_bexpr f be2
-  | BEqZ ze1 ze2 => eval_zexpr f ze1 == eval_zexpr f ze2
-  | BEqQ qe1 qe2 => eval_qexpr f qe1 == eval_qexpr f qe2
-  | BTest be be1 be2 => if eval_bexpr f be then eval_bexpr f be1
-                        else eval_bexpr f be2
-  | BCompZ Leq ze1 ze2 => (eval_zexpr f ze1 <= eval_zexpr f ze2)%R
-  | BCompZ Ltq ze1 ze2 => (eval_zexpr f ze1 <  eval_zexpr f ze2)%R
-  | BCompQ Leq qe1 qe2 => (eval_qexpr f qe1 <= eval_qexpr f qe2)%R
-  | BCompQ Ltq qe1 qe2 => (eval_qexpr f qe1 <  eval_qexpr f qe2)%R
-  | BLogOp And be1 be2 => eval_bexpr f be1 && eval_bexpr f be2
-  | BLogOp Or  be1 be2 => eval_bexpr f be1 || eval_bexpr f be2
-  | BNot be => ~~ eval_bexpr f be
-  end
-
-with eval_zexpr f ze : int :=
-  match ze with
-  | ZSym v => f v
-  | ZConst n => n
-  | ZTest be ze1 ze2 => if eval_bexpr f be then eval_zexpr f ze1
-                        else eval_zexpr f ze2
-  | ZArith Plus ze1 ze2 => eval_zexpr f ze1 + eval_zexpr f ze2
-  | ZArith Times ze1 ze2 => eval_zexpr f ze1 * eval_zexpr f ze2
-  | ZArith Minus ze1 ze2 => eval_zexpr f ze1 - eval_zexpr f ze2
-  | ZTrunc _ _ => 0 (* FIXME *)
-  end
-
-with eval_qexpr f qe : rat :=
-  match qe with
-  | QConst x => x
-  | QTest be qe1 qe2 => if eval_bexpr f be then eval_qexpr f qe1
-                        else eval_qexpr f qe2
-  | QArith Plus qe1 qe2 => eval_qexpr f qe1 + eval_qexpr f qe2
-  | QArith Times qe1 qe2 => eval_qexpr f qe1 * eval_qexpr f qe2
-  | QArith Minus qe1 qe2 => eval_qexpr f qe1 - eval_qexpr f qe2
-  | QOfZ ze => ratz (eval_zexpr f ze)
-  end.
-
-Fixpoint subst_bexpr f be : bexpr :=
-  match be with
-  | BConst _ => be
-  | BEqB be1 be2 => BEqB (subst_bexpr f be1) (subst_bexpr f be2)
-  | BEqZ ze1 ze2 => BEqZ (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | BEqQ qe1 qe2 => BEqQ (subst_qexpr f qe1) (subst_qexpr f qe2)
-  | BTest be be1 be2 =>
-    BTest (subst_bexpr f be) (subst_bexpr f be1) (subst_bexpr f be2)
-  | BCompZ o ze1 ze2 => BCompZ o (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | BCompQ o qe1 qe2 => BCompQ o (subst_qexpr f qe1) (subst_qexpr f qe2)
-  | BLogOp o be1 be2 => BLogOp o (subst_bexpr f be1) (subst_bexpr f be2)
-  | BNot be => BNot (subst_bexpr f be)
-  end
-
-with subst_zexpr f ze : zexpr :=
-  match ze with
-  | ZSym v => f v
-  | ZConst _ => ze
-  | ZTest be ze1 ze2 =>
-    ZTest (subst_bexpr f be) (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | ZArith o ze1 ze2 =>
-    ZArith o (subst_zexpr f ze1) (subst_zexpr f ze2)
-  | ZTrunc o qe =>
-    ZTrunc o (subst_qexpr f qe)
-  end
-
-with subst_qexpr f qe : qexpr :=
-  match qe with
-  | QConst _ => qe
-  | QTest be qe1 qe2 =>
-    QTest (subst_bexpr f be) (subst_qexpr f qe1) (subst_qexpr f qe2)
-  | QArith o qe1 qe2 => QArith o (subst_qexpr f qe1) (subst_qexpr f qe2)
-  | QOfZ ze => QOfZ (subst_zexpr f ze)
-  end.
-
-Ltac solve_subst_exprP :=
-  match goal with
-  | [e : ?x = ?y |- context[?x]] =>
-    rewrite {}e
-  end.
-
-Lemma subst_exprP f g :
-  (forall e,
-      eval_bexpr f (subst_bexpr g e) =
-      eval_bexpr (fun v => eval_zexpr f (g v)) e) /\
-  (forall e,
-      eval_zexpr f (subst_zexpr g e) =
-      eval_zexpr (fun v => eval_zexpr f (g v)) e) /\
-  (forall e,
-      eval_qexpr f (subst_qexpr g e) =
-      eval_qexpr (fun v => eval_zexpr f (g v)) e).
-Proof.
-apply: expr_ind=> //=; try by (move=> *; repeat solve_subst_exprP).
-Qed.
-
-Lemma subst_bexprP f g e :
-  eval_bexpr f (subst_bexpr g e) =
-  eval_bexpr (fun v => eval_zexpr f (g v)) e.
-Proof.
-by case: (subst_exprP f g)=> [?[??]].
-Qed.
-
-Lemma subst_zexprP f g e :
-  eval_zexpr f (subst_zexpr g e) =
-  eval_zexpr (fun v => eval_zexpr f (g v)) e.
-Proof.
-by case: (subst_exprP f g)=> [?[??]].
-Qed.
-
-Lemma subst_qexprP f g e :
-  eval_qexpr f (subst_qexpr g e) =
-  eval_qexpr (fun v => eval_zexpr f (g v)) e.
-Proof.
-by case: (subst_exprP f g)=> [?[??]].
-Qed.
-
-End Eval.
+(** Define equality, choice and ord instances for expressions. *)
 
 Section Instances.
 
@@ -432,6 +312,135 @@ Proof. exact: CanOrdMixin tree_of_qexprK. Qed.
 Canonical qexpr_ordType := Eval hnf in OrdType qexpr qexpr_ordMixin.
 
 End Instances.
+
+Section Eval.
+
+Implicit Types (be : bexpr) (ze : zexpr) (qe : qexpr).
+
+Fixpoint eval_bexpr f be : bool :=
+  match be with
+  | BConst b => b
+  | BEqB be1 be2 => eval_bexpr f be1 == eval_bexpr f be2
+  | BEqZ ze1 ze2 => eval_zexpr f ze1 == eval_zexpr f ze2
+  | BEqQ qe1 qe2 => eval_qexpr f qe1 == eval_qexpr f qe2
+  | BTest be be1 be2 => if eval_bexpr f be then eval_bexpr f be1
+                        else eval_bexpr f be2
+  | BCompZ Leq ze1 ze2 => (eval_zexpr f ze1 <= eval_zexpr f ze2)%R
+  | BCompZ Ltq ze1 ze2 => (eval_zexpr f ze1 <  eval_zexpr f ze2)%R
+  | BCompQ Leq qe1 qe2 => (eval_qexpr f qe1 <= eval_qexpr f qe2)%R
+  | BCompQ Ltq qe1 qe2 => (eval_qexpr f qe1 <  eval_qexpr f qe2)%R
+  | BLogOp And be1 be2 => eval_bexpr f be1 && eval_bexpr f be2
+  | BLogOp Or  be1 be2 => eval_bexpr f be1 || eval_bexpr f be2
+  | BNot be => ~~ eval_bexpr f be
+  end
+
+with eval_zexpr f ze : int :=
+  match ze with
+  | ZSym v => f v
+  | ZConst n => n
+  | ZTest be ze1 ze2 => if eval_bexpr f be then eval_zexpr f ze1
+                        else eval_zexpr f ze2
+  | ZArith Plus ze1 ze2 => eval_zexpr f ze1 + eval_zexpr f ze2
+  | ZArith Times ze1 ze2 => eval_zexpr f ze1 * eval_zexpr f ze2
+  | ZArith Minus ze1 ze2 => eval_zexpr f ze1 - eval_zexpr f ze2
+  | ZTrunc Ceil qe =>
+    let q := eval_qexpr f qe in
+    ((numq q %/ denq q)%Z * denq q)%R
+  | ZTrunc Floor qe =>
+    let q := eval_qexpr f qe in
+    let c := ((numq q %/ denq q)%Z * denq q)%R in
+    if q == ratz c then c else (c + 1)%R
+  end
+
+with eval_qexpr f qe : rat :=
+  match qe with
+  | QConst x => x
+  | QTest be qe1 qe2 => if eval_bexpr f be then eval_qexpr f qe1
+                        else eval_qexpr f qe2
+  | QArith Plus qe1 qe2 => eval_qexpr f qe1 + eval_qexpr f qe2
+  | QArith Times qe1 qe2 => eval_qexpr f qe1 * eval_qexpr f qe2
+  | QArith Minus qe1 qe2 => eval_qexpr f qe1 - eval_qexpr f qe2
+  | QOfZ ze => ratz (eval_zexpr f ze)
+  end.
+
+Fixpoint subst_bexpr f be : bexpr :=
+  match be with
+  | BConst _ => be
+  | BEqB be1 be2 => BEqB (subst_bexpr f be1) (subst_bexpr f be2)
+  | BEqZ ze1 ze2 => BEqZ (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | BEqQ qe1 qe2 => BEqQ (subst_qexpr f qe1) (subst_qexpr f qe2)
+  | BTest be be1 be2 =>
+    BTest (subst_bexpr f be) (subst_bexpr f be1) (subst_bexpr f be2)
+  | BCompZ o ze1 ze2 => BCompZ o (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | BCompQ o qe1 qe2 => BCompQ o (subst_qexpr f qe1) (subst_qexpr f qe2)
+  | BLogOp o be1 be2 => BLogOp o (subst_bexpr f be1) (subst_bexpr f be2)
+  | BNot be => BNot (subst_bexpr f be)
+  end
+
+with subst_zexpr f ze : zexpr :=
+  match ze with
+  | ZSym v => f v
+  | ZConst _ => ze
+  | ZTest be ze1 ze2 =>
+    ZTest (subst_bexpr f be) (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | ZArith o ze1 ze2 =>
+    ZArith o (subst_zexpr f ze1) (subst_zexpr f ze2)
+  | ZTrunc o qe =>
+    ZTrunc o (subst_qexpr f qe)
+  end
+
+with subst_qexpr f qe : qexpr :=
+  match qe with
+  | QConst _ => qe
+  | QTest be qe1 qe2 =>
+    QTest (subst_bexpr f be) (subst_qexpr f qe1) (subst_qexpr f qe2)
+  | QArith o qe1 qe2 => QArith o (subst_qexpr f qe1) (subst_qexpr f qe2)
+  | QOfZ ze => QOfZ (subst_zexpr f ze)
+  end.
+
+Ltac solve_subst_exprP :=
+  match goal with
+  | [e : ?x = ?y |- context[?x]] =>
+    rewrite {}e
+  end.
+
+Lemma subst_exprP f g :
+  (forall e,
+      eval_bexpr f (subst_bexpr g e) =
+      eval_bexpr (fun v => eval_zexpr f (g v)) e) /\
+  (forall e,
+      eval_zexpr f (subst_zexpr g e) =
+      eval_zexpr (fun v => eval_zexpr f (g v)) e) /\
+  (forall e,
+      eval_qexpr f (subst_qexpr g e) =
+      eval_qexpr (fun v => eval_zexpr f (g v)) e).
+Proof.
+apply: expr_ind=> //=; try by (move=> *; repeat solve_subst_exprP).
+Qed.
+
+Lemma subst_bexprP f g e :
+  eval_bexpr f (subst_bexpr g e) =
+  eval_bexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
+Lemma subst_zexprP f g e :
+  eval_zexpr f (subst_zexpr g e) =
+  eval_zexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
+Lemma subst_qexprP f g e :
+  eval_qexpr f (subst_qexpr g e) =
+  eval_qexpr (fun v => eval_zexpr f (g v)) e.
+Proof.
+by case: (subst_exprP f g)=> [?[??]].
+Qed.
+
+End Eval.
+
 
 Fixpoint bexpr_syms be :=
   match be with
