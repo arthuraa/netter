@@ -1,3 +1,7 @@
+(** This file is the main part of our formalization. It defines the semantics of
+the Imp language and the two most important optimizations of Netter: inlining
+and dead-store elimination.  *)
+
 Require Import Coq.Strings.String.
 Require Import Coq.Unicode.Utf8.
 
@@ -17,9 +21,25 @@ Unset Printing Implicit Defensive.
 Local Open Scope fset_scope.
 Local Open Scope prob_scope.
 
+(** In Imp, assignments are the source of randomness.  We use parallel
+assignments: an element of [assignment] maps variables to distributions over
+expressions that will be assigned to these variables.  Note that each variable
+is mapped to its own assignment distribution, which means that the samples will
+be idenpendent.  *)
 Local Notation assignment := {fmap var -> {prob zexpr}}.
+(** Substitutions are used for symbolically executing commands.  They map each
+state variable to an integer expression.  The intent is that this integer
+expression should compute the value that the variable will hold after executing
+a command.  *)
 Local Notation subst := (ffun (fun v : var => ZSym v)).
+(** Variables in Imp can only hold integers, and are almost everywhere equal to
+zero. *)
 Local Notation state := (ffun (fun x : var => 0 : int)).
+
+(** The syntax of Imp is mostly standard, but it omits while loops, and includes
+a block statement for declaring local variables.  We also don't need an explicit
+sequencing command, because the last command argument of [CAssn], [CIf] and
+[CBlock] represents the continuation command to be executed afterwards.  *)
 
 Inductive com :=
 | CSkip
@@ -62,12 +82,20 @@ Lemma subst_assnE σ assn v :
        (assn v).
 Proof. by rewrite /subst_assn mapmE. Qed.
 
+(** State variables used in an assignment. *)
+
 Definition assn_vars defs assn :=
   \bigcup_(pe <- codomm assn)
     \bigcup_(e <- supp pe) zexpr_vars defs e.
 
+(** State variables used in a substitution. *)
+
 Definition subst_vars defs σ :=
   \bigcup_(v <- supp σ) zexpr_vars defs (σ v).
+
+(** Variants of the Imp syntax that omit the continuation argument. Note that
+these perform some optimizations as well; e.g. [Assn] yields back [CSkip] when
+there are no assignments to perform. *)
 
 Definition Assn assn :=
   if assn == emptym then CSkip
@@ -100,6 +128,8 @@ Qed.
 Lemma Seqc1 c : c;; CSkip = c.
 Proof. elim: c=> //= *; congruence. Qed.
 
+(** Evaluate a substitution [σ] on a state [st] and update the value of each
+variable accordingly. *)
 Definition do_subst defs σ st :=
   updm st (mapm (feval_zexpr defs st) (val σ)).
 
@@ -115,6 +145,7 @@ rewrite /do_subst updmE mapmE /appf.
 by case: (val σ v)=> [e|] //=.
 Qed.
 
+(** Perform a probabilistic assignment on a state. *)
 Definition do_assn defs assn st : {prob state} :=
   sample: expr <- mapm_p id assn;
   dirac (updm st (mapm (feval_zexpr defs st) expr)).
@@ -148,6 +179,9 @@ under eq_mapm_p=> e do rewrite /=.
 by rewrite mapm_p_dirac sample_diracL.
 Qed.
 
+(** Semantics of blocks.  First, we set all local variables of the block to
+zero.  Then, we run the block.  Finally, we restore the values of the local
+variables to whatever they held earlier. *)
 Definition do_block vs block st : {prob state} :=
   let new := updm st (mkfmapf (fun=> 0%R) vs) in
   sample: st' <- block new;
@@ -249,6 +283,7 @@ apply/eq_ffun=> v; rewrite !(updmE, mapmE).
 case dassn_v: (dassn v)=> [e|] //=.
 *)
 
+(** Compute all variables that appear on the LHS of a command. *)
 Fixpoint com_mod_vars c : {fset var} :=
   match c with
   | CSkip => fset0
@@ -257,6 +292,8 @@ Fixpoint com_mod_vars c : {fset var} :=
   | CBlock vs block c => (com_mod_vars block :\: vs) :|: com_mod_vars c
   end.
 
+(** [modifies f vs] holds when only the variables in [vs] are affected by
+running [f] on the current state. *)
 Definition modifies (f : state -> {prob state}) vs :=
   forall st st' v, st' \in supp (f st) -> v \notin vs -> st' v = st v.
 
@@ -299,6 +336,8 @@ elim: c.
   exact: do_block_mod st'_supp v_block.
 Qed.
 
+(** Compute the variables that appear on the RHS of a command. *)
+
 Fixpoint com_read_vars defs c :=
   match c with
   | CSkip =>
@@ -316,6 +355,9 @@ Fixpoint com_read_vars defs c :=
     (com_read_vars defs block :\: vs)
     :|: com_read_vars defs c
   end.
+
+(** Our first coupling result: if two states agree on the variables read by a
+command [c], they will still agree on those variables after the command runs. *)
 
 Lemma com_read_varsP defs c st1 st2 :
   let R vs st1 st2 := {in vs, st1 =1 st2} in
@@ -372,7 +414,9 @@ move=> R; elim: c st1 st2.
   exact: IHc.
 Qed.
 
-(* Find out which variables are needed to compute some portion of the state *)
+(** Find out which variables are needed by [c] to compute the values of [vs].
+This is a bit more precise than [com_read_vars]. *)
+
 Fixpoint com_used_vars (vs : {fset var}) defs c :=
   match c with
   | CSkip => vs
@@ -460,6 +504,30 @@ move=> sub efg st1 st2 est; apply: efg=> v v_vs; apply: est.
 by apply/fsubsetP: v_vs.
 Qed.
 
+Lemma match_probWR vs1 vs2 vs2' f g :
+  fsubset vs2' vs2 ->
+  match_prob vs1 vs2 f g ->
+  match_prob vs1 vs2' f g.
+Proof.
+move=> sub efg st1 st2 /efg.
+by apply: couplingW=> st1' st2' e v /(fsubsetP sub); apply: e.
+Qed.
+
+Lemma match_prob_sample vs1 vs2 vs3 f1 g1 f2 g2 :
+  match_prob vs1 vs2 f1 g1 ->
+  match_prob vs2 vs3 f2 g2 ->
+  match_prob vs1 vs3
+             (fun st => sample (f1 st) f2)
+             (fun st => sample (g1 st) g2).
+Proof.
+move=> H1 H2 st1 st2 /H1 H12.
+apply: coupling_sample H12 _.
+by move=> st1' st2' _ _ /H2.
+Qed.
+
+(** Dependencies map each state variable [v] to a set of state variables.  The
+idea is that this set enumerates all variables that are relevant for some
+function [f] to compute the value of [v].  *)
 Definition dependencies := ffun (fun v : var => fset1 v).
 Implicit Types deps : dependencies.
 
@@ -485,6 +553,9 @@ move=> deps12 deps1P vs st1 st2 R12.
 apply: deps1P=> v' /bigcupP [] v v_vs _ /(fsubsetP (deps12 v)) v'_v.
 by apply: R12; apply/bigcupP; exists v.
 Qed.
+
+(** [deps_comp] tracks the dependencies of the composite of two functions;
+cf. [deps_compP] below. *)
 
 Definition deps_comp deps deps' : dependencies :=
   mkffun (fun v => lift_deps deps (deps' v))
@@ -542,6 +613,10 @@ apply/eqP; rewrite eqEfsubset; apply/andP; split.
   apply/bigcupP; exists v; rewrite ?v_g ?in_fset1 ?eqxx //.
 Qed.
 
+(** Compute the dependencies for running an assignment.  Note that the
+correctness lemma [assn_depsP] is flexible in that it allows us to reason about
+performing two assignments that do not necessarily agree on all assigned
+variables. *)
 Definition assn_deps defs assn : dependencies :=
   let def v := if assn v is Some p then
                  \bigcup_(e <- supp p) zexpr_vars defs e
@@ -655,6 +730,8 @@ apply: est.
 by apply/bigcupP; exists v; rewrite // mkffunE in_fsetD v_locals in_fset1.
 Qed.
 
+(** Dependencies of a command. *)
+
 Fixpoint com_deps defs c : dependencies :=
   match c with
   | CSkip => emptyf
@@ -717,6 +794,10 @@ elim: c.
   exact: block_depsP.
 Qed.
 
+(** The function [live_vars_loop k deps vs] tries to saturate the set of
+variables [vs] by successively adding all their dependencies, as recorded in
+[deps]. The [k] parameter bounds the size of the recursion. *)
+
 Fixpoint live_vars_loop k deps (vs : {fset var}) :=
   if k is k.+1 then
     let next := lift_deps deps vs in
@@ -762,6 +843,14 @@ apply: IH; first exact: leq_trans leq_size hsize.
 by rewrite fsubUset sub_vs.
 Qed.
 
+(** Suppose that we want to optimize the behavior of [c] without affecting the
+final values of the variables in [vs0] (for instance, because those variables
+are used to compute performance metrics that we want to model check in Netter.)
+The set of variables [vs = live_vars defs c vs0] contains [vs0] and is such that
+every variable [v ∈ vs] depends only on variables [v' ∈ vs].  Thus, we can
+modify the initial state of variables outside of [vs] without affecting the
+values of [vs0], even after running [c] multiple times.
+*)
 Definition live_vars defs c vs0 :=
   let deps := com_deps defs c in
   let vs   := vs0 :|: lift_deps deps (supp deps) in
@@ -840,6 +929,15 @@ elim: c live.
   move=> ????; exact: IHc.
 Qed.
 
+(** [dead_store_elim defs c vs] deletes assignments to variables in [c] that are
+not needed to compute the values of [vs].  The correctness result
+[dead_store_elimP] says that the [c] and the optimized program are related with
+respect to the live variables needed to compute [vs].  Since [live] contains
+[vs] (cf. [fsubset_live_vars]), and since [match_prob] is compatible with
+composition (cf. [match_prob_sample]), we can run [c] and [c'] in parallel for
+any number of steps and guarantee that the values of [vs] will match in both
+executions.  In our Haskell code, [vs] will be set to the state variables that
+are used to compute the rewards of the program.  *)
 Definition dead_store_elim defs c vs :=
   let live := live_vars defs c vs in
   dead_store_elim_loop defs c live.
@@ -854,6 +952,9 @@ apply: match_probWL (fsubsetUr _ _) _.
 exact: dead_store_elim_loopP.
 Qed.
 
+(** This is an alternative definition of [com] that allows us to store metadata
+in each node.  This will be useful for optimizing the definition of
+[dead_store_elim] (cf. [dead_store_elim_opt].) *)
 Inductive mcom T :=
 | MSkip
 | MAssn of assignment & mcom T & T
@@ -869,6 +970,8 @@ Fixpoint mcom_proj T (mc : mcom T) :=
   | MBlock locals mblock _ mc _ => CBlock locals (mcom_proj mblock) (mcom_proj mc)
   end.
 
+(** Combine the computation of dependencies with the computation of modified
+variables *)
 Fixpoint dead_store_elim_opt_init defs c : mcom dependencies * dependencies * {fset var} :=
   match c with
   | CSkip => (MSkip, emptyf, fset0)
@@ -921,6 +1024,9 @@ by repeat match goal with
 end.
 Qed.
 
+(** Similar to [dead_store_elim_loop], but uses a command annotated with
+metadata to avoid recomputing dependencies. *)
+
 Fixpoint dead_store_elim_opt_loop mc live : com :=
   match mc with
   | MSkip => CSkip
@@ -954,6 +1060,9 @@ by repeat match goal with
 end.
 Qed.
 
+(** An optimized version of [dead_store_elim] that avoids computing dependencies
+and modified variables unnecessarily. *)
+
 Definition dead_store_elim_opt defs c vs0 :=
   let: (mc, deps_c, _) := dead_store_elim_opt_init defs c in
   let  vs := vs0 :|: lift_deps deps_c (supp deps_c) in
@@ -967,6 +1076,8 @@ Proof.
 rewrite /dead_store_elim_opt /dead_store_elim.
 by rewrite dead_store_elim_opt_initE dead_store_elim_opt_loopE.
 Qed.
+
+(** Inlining definition *)
 
 Module Inlining.
 
@@ -1074,6 +1185,19 @@ by move=> {}v v_σ; rewrite fsetDv fdisjoints0.
 Qed.
 
 End Conflicts.
+
+(** The main part of our inlining engine. [inline_loop σ c] runs [c] on a state
+that is abstracted by the substituion [σ], and returns a new substitution that
+abstracts the result of [c], as well as a command [c'] obtained by inlining [σ]
+in the assignments of [c].  By [σ] abstracting a state [st], we mean that
+[wf_subst defs σ st] below should hold, which says that the values of variables
+in [st] can be computed by [σ]. (The definition of [wf_subst] uses a formula
+environment [defs] for generality, but this is not used: our inlining pass
+assumes that the formula environment is initially empty.)
+
+The correctness result for this function, [inline_loopP] below, guarantees that
+the updated substitution [σ'] is a correct abstraction of the state at the end
+of execution. *)
 
 Fixpoint inline_loop σ c : subst * com :=
   match c with
@@ -1312,6 +1436,13 @@ elim: c=> *.
 - exact: inline_loop_if.
 - exact: inline_loop_block.
 Qed.
+
+(** [inline c rew] tries to inline all the deterministic assignments of [c] in
+the command itself and the rewards [rew].  The resulting command and rewards are
+semantically equivalent to the first program, as shown by [inline_run] and
+[inline_rew].  (The rewards are simply a list of integer expressions, and their
+semantics are just the results of evaluating those expressions on a given
+state.) *)
 
 Definition inline c rew :=
   let: (σ, c') := inline_loop emptyf c in
