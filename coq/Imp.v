@@ -8,7 +8,7 @@ From extructures Require Import ord fset fmap ffun.
 
 From deriving Require Import deriving.
 
-From RandC Require Import Extra Expr Prob.
+From Netter Require Import Extra Expr Prob.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
