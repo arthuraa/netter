@@ -22,8 +22,8 @@ the same base name (though this functionality is not being used right now). *)
 
 Inductive var := Var {vname : string; vnum : nat}.
 
-Definition var_indMixin := Eval simpl in [indMixin for var_rect].
-Canonical var_indType := IndType _ var var_indMixin.
+Definition var_indDef := Eval simpl in [indDef for var_rect].
+Canonical var_indType := IndType var var_indDef.
 Definition var_eqMixin := Eval simpl in [derive eqMixin for var].
 Canonical var_eqType := EqType var var_eqMixin.
 Definition var_choiceMixin := [derive choiceMixin for var].
@@ -52,8 +52,8 @@ Definition var_of_sym (s : symbol) : option var :=
 Lemma SVarK : pcancel SVar var_of_sym.
 Proof. by case. Qed.
 
-Definition symbol_indMixin := [indMixin for symbol_rect].
-Canonical symbol_indType := Eval hnf in IndType _ symbol symbol_indMixin.
+Definition symbol_indDef := [indDef for symbol_rect].
+Canonical symbol_indType := Eval hnf in IndType symbol symbol_indDef.
 Definition symbol_eqMixin := [derive eqMixin for symbol].
 Canonical symbol_eqType := Eval hnf in EqType symbol symbol_eqMixin.
 Definition symbol_choiceMixin := [derive choiceMixin for symbol].
@@ -69,8 +69,8 @@ Inductive comp_op :=
 | Leq
 | Ltq.
 
-Definition comp_op_indMixin := [indMixin for comp_op_rect].
-Canonical comp_op_indType := Eval hnf in IndType _ comp_op comp_op_indMixin.
+Definition comp_op_indDef := [indDef for comp_op_rect].
+Canonical comp_op_indType := Eval hnf in IndType comp_op comp_op_indDef.
 Definition comp_op_eqMixin := [derive eqMixin for comp_op].
 Canonical comp_op_eqType := Eval hnf in EqType comp_op comp_op_eqMixin.
 Definition comp_op_choiceMixin := [derive choiceMixin for comp_op].
@@ -84,8 +84,8 @@ Inductive log_op :=
 | And
 | Or.
 
-Definition log_op_indMixin := [indMixin for log_op_rect].
-Canonical log_op_indType := Eval hnf in IndType _ log_op log_op_indMixin.
+Definition log_op_indDef := [indDef for log_op_rect].
+Canonical log_op_indType := Eval hnf in IndType log_op log_op_indDef.
 Definition log_op_eqMixin := [derive eqMixin for log_op].
 Canonical log_op_eqType := Eval hnf in EqType log_op log_op_eqMixin.
 Definition log_op_choiceMixin := [derive choiceMixin for log_op].
@@ -100,8 +100,8 @@ Inductive arith_op :=
 | Times
 | Minus.
 
-Definition arith_op_indMixin := [indMixin for arith_op_rect].
-Canonical arith_op_indType := Eval hnf in IndType _ arith_op arith_op_indMixin.
+Definition arith_op_indDef := [indDef for arith_op_rect].
+Canonical arith_op_indType := Eval hnf in IndType arith_op arith_op_indDef.
 Definition arith_op_eqMixin := [derive eqMixin for arith_op].
 Canonical arith_op_eqType := Eval hnf in EqType arith_op arith_op_eqMixin.
 Definition arith_op_choiceMixin := [derive choiceMixin for arith_op].
@@ -115,8 +115,8 @@ Inductive trunc_op :=
 | Ceil
 | Floor.
 
-Definition trunc_op_indMixin := [indMixin for trunc_op_rect].
-Canonical trunc_op_indType := Eval hnf in IndType _ trunc_op trunc_op_indMixin.
+Definition trunc_op_indDef := [indDef for trunc_op_rect].
+Canonical trunc_op_indType := Eval hnf in IndType trunc_op trunc_op_indDef.
 Definition trunc_op_eqMixin := [derive eqMixin for trunc_op].
 Canonical trunc_op_eqType := Eval hnf in EqType trunc_op trunc_op_eqMixin.
 Definition trunc_op_choiceMixin := [derive choiceMixin for trunc_op].

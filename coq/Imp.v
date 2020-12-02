@@ -47,8 +47,8 @@ Inductive com :=
 | CIf of bexpr & com & com & com
 | CBlock of {fset var} & com & com.
 
-Definition com_indMixin := [indMixin for com_rect].
-Canonical com_indType := IndType _ com com_indMixin.
+Definition com_indDef := [indDef for com_rect].
+Canonical com_indType := IndType com com_indDef.
 Definition com_eqMixin := [derive eqMixin for com].
 Canonical com_eqType := EqType com com_eqMixin.
 
