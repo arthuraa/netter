@@ -168,167 +168,40 @@ with   qexpr_ind := Induction for qexpr Sort Prop.
 
 Combined Scheme expr_ind from bexpr_ind, zexpr_ind, qexpr_ind.
 
-(** Define equality, choice and ord instances for expressions. *)
-
-Section Instances.
-
-Import GenTree.
-
-Fixpoint tree_of_bexpr be : tree nat :=
-  match be with
-  | BConst b =>
-    Node 0 [:: Leaf (pickle b)]
-  | BEqB be1 be2 =>
-    Node 1 [:: tree_of_bexpr be1; tree_of_bexpr be2]
-  | BEqZ ze1 ze2 =>
-    Node 2 [:: tree_of_zexpr ze1; tree_of_zexpr ze2]
-  | BEqQ qe1 qe2 =>
-    Node 3 [:: tree_of_qexpr qe1; tree_of_qexpr qe2]
-  | BTest be1 be2 be3 =>
-    Node 4 [:: tree_of_bexpr be1; tree_of_bexpr be2; tree_of_bexpr be3]
-  | BCompZ co ze1 ze2 =>
-    Node 5 [:: Leaf (pickle co); tree_of_zexpr ze1; tree_of_zexpr ze2]
-  | BCompQ co qe1 qe2 =>
-    Node 6 [:: Leaf (pickle co); tree_of_qexpr qe1; tree_of_qexpr qe2]
-  | BLogOp lo be1 be2 =>
-    Node 7 [:: Leaf (pickle lo); tree_of_bexpr be1; tree_of_bexpr be2]
-  | BNot be =>
-    Node 8 [:: tree_of_bexpr be]
-  end
-
-with tree_of_zexpr ze : tree nat :=
-  match ze with
-  | ZSym s =>
-    Node 0 [:: Leaf (pickle s)]
-  | ZConst n =>
-    Node 1 [:: Leaf (pickle n)]
-  | ZTest be ze1 ze2 =>
-    Node 2 [:: tree_of_bexpr be; tree_of_zexpr ze1; tree_of_zexpr ze2]
-  | ZArith ao ze1 ze2 =>
-    Node 3 [:: Leaf (pickle ao); tree_of_zexpr ze1; tree_of_zexpr ze2]
-  | ZTrunc to qe =>
-    Node 4 [:: Leaf (pickle to); tree_of_qexpr qe]
-  end
-
-with tree_of_qexpr qe : tree nat :=
-  match qe with
-  | QConst q =>
-    Node 0 [:: Leaf (pickle q)]
-  | QTest be qe1 qe2 =>
-    Node 1 [:: tree_of_bexpr be; tree_of_qexpr qe1; tree_of_qexpr qe2]
-  | QArith ao qe1 qe2 =>
-    Node 2 [:: Leaf (pickle ao); tree_of_qexpr qe1; tree_of_qexpr qe2]
-  | QOfZ ze =>
-    Node 3 [:: tree_of_zexpr ze]
-  end.
-
-Definition unpickle_def {T : countType} (def : T) (n : nat) : T :=
-  odflt def (unpickle n).
-
-Lemma pickleK' (T : countType) (def : T) : cancel pickle (unpickle_def def).
-Proof. by move=> x; rewrite /unpickle_def pickleK. Qed.
-
-Fixpoint bexpr_of_tree (be : tree nat) : bexpr :=
-  match be with
-  | Node 0 [:: Leaf b] =>
-    BConst (unpickle_def true b)
-  | Node 1 [:: be1; be2] =>
-    BEqB (bexpr_of_tree be1) (bexpr_of_tree be2)
-  | Node 2 [:: ze1; ze2] =>
-    BEqZ (zexpr_of_tree ze1) (zexpr_of_tree ze2)
-  | Node 3 [:: qe1; qe2] =>
-    BEqQ (qexpr_of_tree qe1) (qexpr_of_tree qe2)
-  | Node 4 [:: be1; be2; be3] =>
-    BTest (bexpr_of_tree be1) (bexpr_of_tree be2) (bexpr_of_tree be3)
-  | Node 5 [:: Leaf co; ze1; ze2] =>
-    BCompZ (unpickle_def Leq co) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
-  | Node 6 [:: Leaf co; qe1; qe2] =>
-    BCompQ (unpickle_def Leq co) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
-  | Node 7 [:: Leaf lo; be1; be2] =>
-    BLogOp (unpickle_def And lo) (bexpr_of_tree be1) (bexpr_of_tree be2)
-  | Node 8 [:: be] => BNot (bexpr_of_tree be)
-  | _ => BConst false
-  end
-
-with zexpr_of_tree ze : zexpr :=
-  match ze with
-  | Node 0 [:: Leaf s] =>
-    ZSym (unpickle_def (SFor 0) s)
-  | Node 1 [:: Leaf n] =>
-    ZConst (unpickle_def (0 : int) n)
-  | Node 2 [:: be; ze1; ze2] =>
-    ZTest (bexpr_of_tree be) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
-  | Node 3 [:: Leaf ao; ze1; ze2] =>
-    ZArith (unpickle_def Plus ao) (zexpr_of_tree ze1) (zexpr_of_tree ze2)
-  | Node 4 [:: Leaf to; qe] =>
-    ZTrunc (unpickle_def Ceil to) (qexpr_of_tree qe)
-  | _ => ZConst 0
-  end
-
-with qexpr_of_tree qe : qexpr :=
-  match qe with
-  | Node 0 [:: Leaf q] =>
-    QConst (unpickle_def 0%Q q)
-  | Node 1 [:: be; qe1; qe2] =>
-    QTest (bexpr_of_tree be) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
-  | Node 2 [:: Leaf ao; qe1; qe2] =>
-    QArith (unpickle_def Plus ao) (qexpr_of_tree qe1) (qexpr_of_tree qe2)
-  | Node 3 [:: ze] =>
-    QOfZ (zexpr_of_tree ze)
-  | _ => QConst 0
-  end.
-
-Lemma tree_of_exprK : cancel tree_of_bexpr bexpr_of_tree /\
-                      cancel tree_of_zexpr zexpr_of_tree /\
-                      cancel tree_of_qexpr qexpr_of_tree.
-Proof.
-apply: expr_ind=> // *;
-by rewrite /= ?pickleK' //;
-repeat match goal with
-| H : ?x = _ |- context[?x] => rewrite {}H //
-end.
-Qed.
-
-Lemma tree_of_bexprK : cancel tree_of_bexpr bexpr_of_tree.
-Proof. by case: tree_of_exprK=> [? [??]]. Qed.
-
-Lemma tree_of_zexprK : cancel tree_of_zexpr zexpr_of_tree.
-Proof. by case: tree_of_exprK=> [? [??]]. Qed.
-
-Lemma tree_of_qexprK : cancel tree_of_qexpr qexpr_of_tree.
-Proof. by case: tree_of_exprK=> [? [??]]. Qed.
-
+Definition expr_indDef := [indDef for expr_rect].
+Canonical bexpr_indType := IndType bexpr expr_indDef.
+Canonical zexpr_indType := IndType zexpr expr_indDef.
+Canonical qexpr_indType := IndType qexpr expr_indDef.
+(* EqType *)
 Lemma bexpr_eqMixin : Equality.mixin_of bexpr.
-Proof. exact: CanEqMixin tree_of_bexprK. Qed.
+Proof. exact: [derive nored eqMixin for bexpr]. Qed.
 Canonical bexpr_eqType := EqType bexpr bexpr_eqMixin.
-Lemma bexpr_choiceMixin : Choice.mixin_of bexpr.
-Proof. exact: CanChoiceMixin tree_of_bexprK. Qed.
-Canonical bexpr_choiceType := Eval hnf in ChoiceType bexpr bexpr_choiceMixin.
-Lemma bexpr_ordMixin : Ord.mixin_of bexpr.
-Proof. exact: CanOrdMixin tree_of_bexprK. Qed.
-Canonical bexpr_ordType := Eval hnf in OrdType bexpr bexpr_ordMixin.
-
 Lemma zexpr_eqMixin : Equality.mixin_of zexpr.
-Proof. exact: CanEqMixin tree_of_zexprK. Qed.
+Proof. exact: [derive nored eqMixin for zexpr]. Qed.
 Canonical zexpr_eqType := EqType zexpr zexpr_eqMixin.
-Lemma zexpr_choiceMixin : Choice.mixin_of zexpr.
-Proof. exact: CanChoiceMixin tree_of_zexprK. Qed.
-Canonical zexpr_choiceType := Eval hnf in ChoiceType zexpr zexpr_choiceMixin.
-Lemma zexpr_ordMixin : Ord.mixin_of zexpr.
-Proof. exact: CanOrdMixin tree_of_zexprK. Qed.
-Canonical zexpr_ordType := Eval hnf in OrdType zexpr zexpr_ordMixin.
-
 Lemma qexpr_eqMixin : Equality.mixin_of qexpr.
-Proof. exact: CanEqMixin tree_of_qexprK. Qed.
+Proof. exact: [derive nored eqMixin for qexpr]. Qed.
 Canonical qexpr_eqType := EqType qexpr qexpr_eqMixin.
+(* ChoiceType *)
+Lemma bexpr_choiceMixin : Choice.mixin_of bexpr.
+Proof. exact: [derive choiceMixin for bexpr]. Qed.
+Canonical bexpr_choiceType := ChoiceType bexpr bexpr_choiceMixin.
+Lemma zexpr_choiceMixin : Choice.mixin_of zexpr.
+Proof. exact: [derive choiceMixin for zexpr]. Qed.
+Canonical zexpr_choiceType := ChoiceType zexpr zexpr_choiceMixin.
 Lemma qexpr_choiceMixin : Choice.mixin_of qexpr.
-Proof. exact: CanChoiceMixin tree_of_qexprK. Qed.
-Canonical qexpr_choiceType := Eval hnf in ChoiceType qexpr qexpr_choiceMixin.
+Proof. exact: [derive choiceMixin for qexpr]. Qed.
+Canonical qexpr_choiceType := ChoiceType qexpr qexpr_choiceMixin.
+(* Ord *)
+Lemma bexpr_ordMixin : Ord.mixin_of bexpr.
+Proof. exact: [derive nored ordMixin for bexpr]. Qed.
+Canonical bexpr_ordType := OrdType bexpr bexpr_ordMixin.
+Lemma zexpr_ordMixin : Ord.mixin_of zexpr.
+Proof. exact: [derive nored ordMixin for zexpr]. Qed.
+Canonical zexpr_ordType := OrdType zexpr zexpr_ordMixin.
 Lemma qexpr_ordMixin : Ord.mixin_of qexpr.
-Proof. exact: CanOrdMixin tree_of_qexprK. Qed.
-Canonical qexpr_ordType := Eval hnf in OrdType qexpr qexpr_ordMixin.
-
-End Instances.
+Proof. exact: [derive nored ordMixin for qexpr]. Qed.
+Canonical qexpr_ordType := OrdType qexpr qexpr_ordMixin.
 
 (** Evaluate expressions given an interpretation of symbols [f]. *)
 
