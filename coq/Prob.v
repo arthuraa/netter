@@ -463,6 +463,12 @@ Definition unif := mkprob unif_subproof1 unif_subproof2.
 Lemma unifE x : unif x = if x \in X then (size X)%:R^-1 else 0.
 Proof. by rewrite mkprobE. Qed.
 
+Lemma supp_unif : supp unif = X.
+Proof.
+apply/eq_fset => x; rewrite mem_supp unifE.
+by case: ifP => // _; rewrite GRing.invr_eq0 Num.Theory.pnatr_eq0 sizes_eq0.
+Qed.
+
 End Uniform.
 
 (** To simplify the reasoning about our optimizations, we use probabilistic
