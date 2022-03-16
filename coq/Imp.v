@@ -582,7 +582,7 @@ Qed.
 
 Lemma supp_deps_comp deps deps' :
   fsubset (supp (deps_comp deps deps')) (supp deps :|: supp deps').
-Proof. exact: supp_mkffun_subset. Qed.
+Proof. exact: supp_mkffun_sub. Qed.
 
 Lemma deps_compP deps_f deps_g f g :
   deps_spec deps_f f  ->
@@ -754,17 +754,17 @@ elim: c.
 - by rewrite /= supp0 fsubsetxx.
 - move=> /= assn c IH.
   apply: fsubset_trans (supp_deps_comp _ _) _.
-  apply: fsetUSS=> //; exact: supp_mkffun_subset.
+  apply: fsetUSS=> //; exact: supp_mkffun_sub.
 - move=> /= b cthen IHthen celse IHelse c IHc.
   apply: fsubset_trans (supp_deps_comp _ _) _.
-  apply: fsetUSS=> //; exact: supp_mkffun_subset.
+  apply: fsetUSS=> //; exact: supp_mkffun_sub.
 - move=> /= locals block IHblock c IHc.
   apply: fsubset_trans (supp_deps_comp _ _) _.
   apply: fsetUSS=> //.
-  apply: fsubset_trans (supp_mkffun_subset _ _ _) _.
+  apply: fsubset_trans (supp_mkffun_sub _ _) _.
   rewrite fsubDset fsetUDr fsetDv fsetD0.
   apply: fsubset_trans (supp_deps_comp _ _) _.
-  by rewrite fsetUSS // supp_mkffun_subset.
+  by rewrite fsetUSS // supp_mkffun_sub.
 Qed.
 
 Lemma com_depsP defs c : deps_spec (com_deps defs c) (run defs c).
@@ -1134,7 +1134,7 @@ set has_conflict := fun v => ~~ fdisjoint _ _.
 set next' := fset_filter has_conflict rem.
 move=> size_rem sub1 sub2 accP v v_σ.
 have acc_next: acc = acc :\: next :|: next.
-  by rewrite -{1}(fsetID acc next) (fsetIidPr _ _ sub1) fsetUC.
+  by rewrite -{1}(fsetID acc next) (fsetIidPr sub1) fsetUC.
 case: (altP eqP)=> e.
   move=> v_loop; have v_rem : v \in rem by rewrite in_fsetD v_loop.
   rewrite acc_next fdisjointUr accP //.
